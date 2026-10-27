@@ -1,4 +1,4 @@
-/* e-Data Base ATLAS - GitHub Pages frontend
+/* ATLAS-Data Base - GitHub Pages frontend
    API URL and key are intentionally not hard-coded. Configure them in the Settings dialog. */
 const LINES = [
   "FRONT SEAT IMV 578W",
@@ -73,6 +73,16 @@ function dateValue(v){
   if(!v) return null;
   if(v instanceof Date && !isNaN(v)) return v;
   const s=String(v).trim();
+  // Supports month-only Thai labels from Google Sheets, e.g. "ก.ย.-26".
+  const thaiMonthMap = {"ม.ค.":1,"ก.พ.":2,"มี.ค.":3,"เม.ย.":4,"พ.ค.":5,"มิ.ย.":6,"ก.ค.":7,"ส.ค.":8,"ก.ย.":9,"ต.ค.":10,"พ.ย.":11,"ธ.ค.":12};
+  const compact = s.replace(/\\s+/g,"");
+  const thaiMatch = compact.match(/^(ม\\.ค\\.|ก\\.พ\\.|มี\\.ค\\.|เม\\.ย\\.|พ\\.ค\\.|มิ\\.ย\\.|ก\\.ค\\.|ส\\.ค\\.|ก\\.ย\\.|ต\\.ค\\.|พ\\.ย\\.|ธ\\.ค\\.)-?(\\d{2,4})$/);
+  if(thaiMatch){
+    let year = Number(thaiMatch[2]);
+    if(year < 100) year += 2000;
+    if(year > 2400) year -= 543;
+    return new Date(year, thaiMonthMap[thaiMatch[1]]-1, 1);
+  }
   let m=s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
   if(m){let a=+m[1],b=+m[2],y=+m[3]; if(y>2400)y-=543; return new Date(y,b-1,a);}
   m=s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
@@ -161,14 +171,14 @@ function currentTools(){
 }
 function renderTools(){
   const arr=currentTools();$("#resultCount").textContent=`${arr.length} รายการ`;
-  if(!arr.length){$("#toolTableBody").innerHTML=`<tr><td colspan="8" class="empty">${state.tools.length?"ไม่พบ Tool ตามเงื่อนไข":"ยังไม่มีข้อมูล Tool หรือยังไม่ได้เชื่อมต่อ API"}</td></tr>`;return;}
+  if(!arr.length){$("#toolTableBody").innerHTML=`<tr><td colspan="9" class="empty">${state.tools.length?"ไม่พบ Tool ตามเงื่อนไข":"ยังไม่มีข้อมูล Tool หรือยังไม่ได้เชื่อมต่อ API"}</td></tr>`;return;}
   $("#toolTableBody").innerHTML=arr.map(t=>{
     const st=calStatus(t);
     return `<tr>
       <td><div class="tool-name">${esc(t.toolModel||"ไม่ระบุ Model")}</div><div class="tool-serial">${esc(t.serial||"ไม่มี Serial")}</div></td>
       <td><span class="line-pill" title="${esc(t.line)}">${esc(t.line)}</span></td>
       <td>${esc(t.process||"—")}</td><td>${esc(t.controller||"—")}</td><td>${esc(t.ipAddress||"—")}</td>
-      <td>${esc(fmtDate(t.nextCalibration))}</td><td><span class="cal-badge ${st.key}">${esc(st.label)}</span></td>
+      <td>${esc(fmtDate(t.currentCalibration))}</td><td>${esc(fmtDate(t.nextCalibration))}</td><td><span class="cal-badge ${st.key}">${esc(st.label)}</span></td>
       <td><div class="row-actions"><button class="mini-btn" data-action="move" data-serial="${esc(t.serial)}">Move</button><button class="mini-btn" data-action="swap" data-serial="${esc(t.serial)}">Swap</button></div></td>
     </tr>`;
   }).join("");
@@ -191,7 +201,7 @@ function renderHistory(){
 function renderAll(){renderStats();renderTools();renderHistory();$("#lastUpdated").textContent="อัปเดตล่าสุด "+new Date().toLocaleTimeString("th-TH",{hour:"2-digit",minute:"2-digit",second:"2-digit"});}
 async function refreshAll(){
   hideNotice();
-  if(!hasApi()){showNotice("กรุณาตั้งค่า Apps Script Web App URL และ API key ก่อนใช้งาน โดยกดปุ่มตั้งค่าที่แถบเมนู (คลิกชื่อ e-Data Base ATLAS หรือกด Alt+S)","");$("#connectionLabel").textContent="ยังไม่ได้ตั้งค่า API";$("#toolTableBody").innerHTML='<tr><td colspan="8" class="empty">ยังไม่ได้เชื่อมต่อ Google Sheets API</td></tr>';return;}
+  if(!hasApi()){showNotice("กรุณาตั้งค่า Apps Script Web App URL และ API key ก่อนใช้งาน โดยกดปุ่มตั้งค่าที่แถบเมนู (คลิกชื่อ ATLAS-Data Base หรือกด Alt+S)","");$("#connectionLabel").textContent="ยังไม่ได้ตั้งค่า API";$("#toolTableBody").innerHTML='<tr><td colspan="9" class="empty">ยังไม่ได้เชื่อมต่อ Google Sheets API</td></tr>';return;}
   try{
     $("#connectionLabel").textContent="กำลังเชื่อมต่อ...";
     const [list,hist]=await Promise.all([apiRead("list"),apiRead("history")]);
