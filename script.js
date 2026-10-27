@@ -41,8 +41,8 @@ const aliasMap = {
   tightenings: ["total no. of tightenings","total no of tightenings","total tightenings","tightening count","no. of tightenings","total tightening"],
   ipAddress: ["ip address","ip","ip address of tool"],
   controller: ["controller","controller model"],
-  currentCalibration: ["current date calibration","current calibration date","calibration date","last calibration","current calibration"],
-  nextCalibration: ["due date calibration","next calibration date","next calibration","calibration due date"],
+  currentCalibration: ["currentcalibration","current date calibration","current calibration date","calibration date","last calibration","current calibration"],
+  nextCalibration: ["nextcalibration","due date calibration","next calibration date","next calibration","calibration due date"],
   notes: ["notes","remark","remarks","note"],
   updatedAt: ["updated at","last updated"]
 };
@@ -70,24 +70,42 @@ function normalizeTool(raw){
 }
 function esc(v){return String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));}
 function dateValue(v){
-  if(!v) return null;
-  if(v instanceof Date && !isNaN(v)) return v;
-  const s=String(v).trim();
-  // Supports month-only Thai labels from Google Sheets, e.g. "ก.ย.-26".
+  if(v === null || v === undefined || v === "") return null;
+  if(v instanceof Date && !isNaN(v)) return new Date(v.getTime());
+  const s = String(v).trim();
+  if(!s) return null;
+
+  // Full dates such as 30/9/2026 or 30/09/2026.
+  let m = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
+  if(m){
+    let day = Number(m[1]), month = Number(m[2]), year = Number(m[3]);
+    if(year > 2400) year -= 543;
+    const d = new Date(year, month - 1, day);
+    return d.getFullYear() === year && d.getMonth() === month - 1 && d.getDate() === day ? d : null;
+  }
+
+  // ISO dates such as 2026-09-30.
+  m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})(?:T.*)?$/);
+  if(m){
+    let year = Number(m[1]), month = Number(m[2]), day = Number(m[3]);
+    if(year > 2400) year -= 543;
+    const d = new Date(year, month - 1, day);
+    return d.getFullYear() === year && d.getMonth() === month - 1 && d.getDate() === day ? d : null;
+  }
+
+  // Thai month labels such as ก.ย.-26.
   const thaiMonthMap = {"ม.ค.":1,"ก.พ.":2,"มี.ค.":3,"เม.ย.":4,"พ.ค.":5,"มิ.ย.":6,"ก.ค.":7,"ส.ค.":8,"ก.ย.":9,"ต.ค.":10,"พ.ย.":11,"ธ.ค.":12};
-  const compact = s.replace(/\\s+/g,"");
-  const thaiMatch = compact.match(/^(ม\\.ค\\.|ก\\.พ\\.|มี\\.ค\\.|เม\\.ย\\.|พ\\.ค\\.|มิ\\.ย\\.|ก\\.ค\\.|ส\\.ค\\.|ก\\.ย\\.|ต\\.ค\\.|พ\\.ย\\.|ธ\\.ค\\.)-?(\\d{2,4})$/);
+  const compact = s.replace(/\s+/g, "");
+  const thaiMatch = compact.match(/^(ม\.ค\.|ก\.พ\.|มี\.ค\.|เม\.ย\.|พ\.ค\.|มิ\.ย\.|ก\.ค\.|ส\.ค\.|ก\.ย\.|ต\.ค\.|พ\.ย\.|ธ\.ค\.)(?:-|\/)?(\d{2,4})$/);
   if(thaiMatch){
     let year = Number(thaiMatch[2]);
     if(year < 100) year += 2000;
     if(year > 2400) year -= 543;
-    return new Date(year, thaiMonthMap[thaiMatch[1]]-1, 1);
+    return new Date(year, thaiMonthMap[thaiMatch[1]] - 1, 1);
   }
-  let m=s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
-  if(m){let a=+m[1],b=+m[2],y=+m[3]; if(y>2400)y-=543; return new Date(y,b-1,a);}
-  m=s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
-  if(m){let y=+m[1]; if(y>2400)y-=543; return new Date(y,+m[2]-1,+m[3]);}
-  const d=new Date(s); return isNaN(d)?null:d;
+
+  const parsed = new Date(s);
+  return isNaN(parsed) ? null : parsed;
 }
 function fmtDate(v){const d=dateValue(v);return d?d.toLocaleDateString("en-GB",{day:"2-digit",month:"short",year:"numeric"}):"—";}
 function calStatus(tool){
