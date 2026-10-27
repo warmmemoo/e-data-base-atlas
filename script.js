@@ -1,0 +1,225 @@
+/* e-Data Base ATLAS - GitHub Pages frontend
+   API URL and key are intentionally not hard-coded. Configure them in the Settings dialog. */
+const LINES = [
+  "FRONT SEAT IMV 578W",
+  "REAR SEAT IMV 578W",
+  "TOYOTA 867B WELDING F/S",
+  "TOYOTA 500D P8",
+  "TOYOTA 500D COVERING",
+  "ISUZU RT50",
+  "Back up"
+];
+const BACKUP = "Back up";
+const $ = (s) => document.querySelector(s);
+const state = { tools: [], history: [], view: "dashboard", selectedLine: "", apiUrl: "", apiKey: "", busy: false };
+const aliasMap = {
+  toolModel: ["tools model","tool model","model","tool_model","model tool"],
+  serial: ["tools ms serial no.","tools ms serial number","serial no","serial number","serial","tool serial","tool ms serial no","serial no."],
+  line: ["line","location","line/location","tool location","area","section"],
+  process: ["process","process name"],
+  tightenings: ["total no. of tightenings","total no of tightenings","total tightenings","tightening count","no. of tightenings","total tightening"],
+  ipAddress: ["ip address","ip","ip address of tool"],
+  controller: ["controller","controller model"],
+  currentCalibration: ["current date calibration","current calibration date","calibration date","last calibration","current calibration"],
+  nextCalibration: ["due date calibration","next calibration date","next calibration","calibration due date"],
+  notes: ["notes","remark","remarks","note"],
+  updatedAt: ["updated at","last updated"]
+};
+function normalizeHeader(v){ return String(v ?? "").trim().toLowerCase().replace(/[_\-]+/g," ").replace(/\s+/g," "); }
+function findVal(obj, keys){ const wanted = keys.map(normalizeHeader); for(const k of Object.keys(obj||{})){if(wanted.includes(normalizeHeader(k))) return obj[k];} return ""; }
+function normalizeTool(raw){
+  const out = {...raw};
+  for(const [field, aliases] of Object.entries(aliasMap)) out[field] = findVal(raw, [field,...aliases]);
+  out.serial = String(out.serial||"").trim();
+  out.line = String(out.line||"Unassigned").trim();
+  out.toolModel = String(out.toolModel||"").trim();
+  out.process = String(out.process||"").trim();
+  out.controller = String(out.controller||"").trim();
+  out.ipAddress = String(out.ipAddress||"").trim();
+  out.nextCalibration = String(out.nextCalibration||"").trim();
+  out.currentCalibration = String(out.currentCalibration||"").trim();
+  return out;
+}
+function esc(v){return String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));}
+function dateValue(v){
+  if(!v) return null;
+  if(v instanceof Date && !isNaN(v)) return v;
+  const s=String(v).trim();
+  let m=s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
+  if(m){let a=+m[1],b=+m[2],y=+m[3]; if(y>2400)y-=543; return new Date(y,b-1,a);}
+  m=s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+  if(m){let y=+m[1]; if(y>2400)y-=543; return new Date(y,+m[2]-1,+m[3]);}
+  const d=new Date(s); return isNaN(d)?null:d;
+}
+function fmtDate(v){const d=dateValue(v);return d?d.toLocaleDateString("en-GB",{day:"2-digit",month:"short",year:"numeric"}):"—";}
+function calStatus(tool){
+  const d=dateValue(tool.nextCalibration); if(!d)return {key:"unknown",label:"ไม่ระบุวันที่"};
+  const now=new Date(); now.setHours(0,0,0,0); d.setHours(0,0,0,0);
+  const days=Math.ceil((d-now)/86400000);
+  if(days<0)return {key:"overdue",label:"Overdue"};
+  if(days<=30)return {key:"soon",label:"Due Soon"};
+  return {key:"ok",label:"OK"};
+}
+function showNotice(msg,type=""){const n=$("#notice");n.textContent=msg;n.className="notice"+(type?" "+type:"");n.classList.remove("hidden");}
+function hideNotice(){$("#notice").classList.add("hidden");}
+function hasApi(){return Boolean(state.apiUrl && state.apiKey);}
+function jsonp(url){
+  return new Promise((resolve,reject)=>{
+    const cb="atlasCallback_"+Date.now()+"_"+Math.random().toString(36).slice(2);
+    const script=document.createElement("script"); const timer=setTimeout(()=>finish(new Error("หมดเวลารอ API")),18000);
+    function finish(err,data){clearTimeout(timer);delete window[cb];script.remove();err?reject(err):resolve(data);}
+    window[cb]=(data)=>finish(null,data); script.onerror=()=>finish(new Error("เรียก API ไม่สำเร็จ ตรวจ URL/Deployment")); 
+    script.src=url+(url.includes("?")?"&":"?")+"callback="+cb+"&_="+Date.now();
+    document.head.appendChild(script);
+  });
+}
+async function apiRead(action,extra={}){
+  if(!hasApi())throw new Error("ยังไม่ได้ตั้งค่า API กรุณาเปิดตั้งค่าการเชื่อมต่อ");
+  const url=new URL(state.apiUrl);url.searchParams.set("action",action);url.searchParams.set("key",state.apiKey);
+  Object.entries(extra).forEach(([k,v])=>url.searchParams.set(k,String(v)));
+  const data=await jsonp(url.toString());if(!data||data.ok!==true)throw new Error(data?.error||"API returned an error");return data;
+}
+async function apiWrite(payload){
+  if(!hasApi())throw new Error("ยังไม่ได้ตั้งค่า API กรุณาเปิดตั้งค่าการเชื่อมต่อ");
+  // GAS cross-origin POST: use text/plain to avoid preflight. no-cors response is opaque;
+  // refresh the authoritative sheet after the request before reporting the result.
+  await fetch(state.apiUrl,{method:"POST",mode:"no-cors",redirect:"follow",headers:{"Content-Type":"text/plain;charset=utf-8"},body:JSON.stringify({...payload,key:state.apiKey})});
+  await new Promise(r=>setTimeout(r,1100));
+  const refreshed=await apiRead("list");
+  state.tools=(refreshed.tools||[]).map(normalizeTool);
+  try{const h=await apiRead("history");state.history=h.history||[];}catch(_){}
+  renderAll();
+  return true;
+}
+function populateLines(){
+  $("#lineNav").innerHTML=LINES.filter(x=>x!==BACKUP).map(x=>`<button class="nav-item line-item" data-line="${esc(x)}"><span>◦</span>${esc(x)}</button>`).join("");
+  $("#lineFilter").innerHTML='<option value="">ทุก Line</option>'+LINES.map(x=>`<option value="${esc(x)}">${esc(x)}</option>`).join("");
+  $("#addLineSelect").innerHTML=LINES.map(x=>`<option value="${esc(x)}">${esc(x)}</option>`).join("");
+  $("#destinationSelect").innerHTML=LINES.map(x=>`<option value="${esc(x)}">${esc(x)}</option>`).join("");
+}
+function setView(view,line=""){
+  state.view=view;state.selectedLine=line;
+  document.querySelectorAll(".nav-item").forEach(b=>b.classList.remove("active"));
+  if(view==="dashboard")document.querySelector('[data-view="dashboard"]')?.classList.add("active");
+  if(view==="backup")document.querySelector('[data-view="backup"]')?.classList.add("active");
+  if(view==="history")document.querySelector('[data-view="history"]')?.classList.add("active");
+  if(line)document.querySelector(`[data-line="${CSS.escape(line)}"]`)?.classList.add("active");
+  $("#dashboardView").classList.toggle("hidden",view==="history");$("#historyView").classList.toggle("hidden",view!=="history");
+  $("#pageTitle").textContent=view==="dashboard"?"Dashboard":view==="backup"?"Back up":view==="history"?"Movement History":line;
+  $("#tableHeading").textContent=view==="backup"?"Back up Tools":line?line+" — Tools":"Tool List";
+  $("#sidebar").classList.remove("open");renderTools();
+}
+function currentTools(){
+  let arr=[...state.tools];const search=$("#searchInput").value.trim().toLowerCase(),line=$("#lineFilter").value,status=$("#statusFilter").value,sort=$("#sortSelect").value;
+  if(state.view==="backup")arr=arr.filter(t=>t.line.toLowerCase()===BACKUP.toLowerCase());
+  else if(state.selectedLine)arr=arr.filter(t=>t.line===state.selectedLine);
+  if(line)arr=arr.filter(t=>t.line===line);
+  if(search)arr=arr.filter(t=>[t.toolModel,t.serial,t.process,t.ipAddress,t.controller,t.line].some(v=>String(v||"").toLowerCase().includes(search)));
+  if(status)arr=arr.filter(t=>calStatus(t).key===status);
+  arr.sort((a,b)=>sort==="serial"?a.serial.localeCompare(b.serial):sort==="calibration"?((dateValue(a.nextCalibration)||new Date(8640000000000000))-(dateValue(b.nextCalibration)||new Date(8640000000000000))):a.line.localeCompare(b.line)||a.serial.localeCompare(b.serial));
+  return arr;
+}
+function renderTools(){
+  const arr=currentTools();$("#resultCount").textContent=`${arr.length} รายการ`;
+  if(!arr.length){$("#toolTableBody").innerHTML=`<tr><td colspan="8" class="empty">${state.tools.length?"ไม่พบ Tool ตามเงื่อนไข":"ยังไม่มีข้อมูล Tool หรือยังไม่ได้เชื่อมต่อ API"}</td></tr>`;return;}
+  $("#toolTableBody").innerHTML=arr.map(t=>{
+    const st=calStatus(t);
+    return `<tr>
+      <td><div class="tool-name">${esc(t.toolModel||"ไม่ระบุ Model")}</div><div class="tool-serial">${esc(t.serial||"ไม่มี Serial")}</div></td>
+      <td><span class="line-pill" title="${esc(t.line)}">${esc(t.line)}</span></td>
+      <td>${esc(t.process||"—")}</td><td>${esc(t.controller||"—")}</td><td>${esc(t.ipAddress||"—")}</td>
+      <td>${esc(fmtDate(t.nextCalibration))}</td><td><span class="cal-badge ${st.key}">${esc(st.label)}</span></td>
+      <td><div class="row-actions"><button class="mini-btn" data-action="move" data-serial="${esc(t.serial)}">Move</button><button class="mini-btn" data-action="swap" data-serial="${esc(t.serial)}">Swap</button></div></td>
+    </tr>`;
+  }).join("");
+}
+function renderStats(){
+  const statuses=state.tools.map(calStatus);$("#totalTools").textContent=state.tools.length;
+  $("#calOk").textContent=statuses.filter(s=>s.key==="ok").length;
+  $("#dueSoon").textContent=statuses.filter(s=>s.key==="soon").length;
+  $("#overdue").textContent=statuses.filter(s=>s.key==="overdue").length;
+  $("#backupCount").textContent=state.tools.filter(t=>t.line.toLowerCase()===BACKUP.toLowerCase()).length;
+  const old=$("#lineFilter").value;
+  $("#lineFilter").innerHTML='<option value="">ทุก Line</option>'+LINES.map(x=>`<option value="${esc(x)}">${esc(x)}</option>`).join("");
+  $("#lineFilter").value=old;
+}
+function renderHistory(){
+  const rows=[...state.history].reverse();
+  if(!rows.length){$("#historyBody").innerHTML='<tr><td colspan="7" class="empty">ยังไม่มีประวัติการเปลี่ยนแปลง</td></tr>';return;}
+  $("#historyBody").innerHTML=rows.map(h=>`<tr><td>${esc(h.timestamp||"—")}</td><td>${esc(h.action||"—")}</td><td>${esc(h.serial||"—")}</td><td>${esc(h.fromLine||"—")}</td><td>${esc(h.toLine||"—")}</td><td>${esc(h.details||"—")}</td><td>${esc(h.actor||"—")}</td></tr>`).join("");
+}
+function renderAll(){renderStats();renderTools();renderHistory();$("#lastUpdated").textContent="อัปเดตล่าสุด "+new Date().toLocaleTimeString("th-TH",{hour:"2-digit",minute:"2-digit",second:"2-digit"});}
+async function refreshAll(){
+  hideNotice();
+  if(!hasApi()){showNotice("กรุณาตั้งค่า Apps Script Web App URL และ API key ก่อนใช้งาน โดยกดปุ่มตั้งค่าที่แถบเมนู (คลิกชื่อ e-Data Base ATLAS หรือกด Alt+S)","");$("#connectionLabel").textContent="ยังไม่ได้ตั้งค่า API";$("#toolTableBody").innerHTML='<tr><td colspan="8" class="empty">ยังไม่ได้เชื่อมต่อ Google Sheets API</td></tr>';return;}
+  try{
+    $("#connectionLabel").textContent="กำลังเชื่อมต่อ...";
+    const [list,hist]=await Promise.all([apiRead("list"),apiRead("history")]);
+    state.tools=(list.tools||[]).map(normalizeTool);state.history=hist.history||[];
+    $("#connectionLabel").textContent="เชื่อมต่อ API แล้ว";$(".status-dot")?.classList.add("online");
+    renderAll();showNotice("โหลดข้อมูลจาก Google Sheets สำเร็จ","success");
+    setTimeout(()=>{if($("#notice").textContent==="โหลดข้อมูลจาก Google Sheets สำเร็จ")hideNotice();},3500);
+  }catch(e){$("#connectionLabel").textContent="เชื่อมต่อไม่สำเร็จ";$(".status-dot")?.classList.remove("online");showNotice("เชื่อมต่อไม่สำเร็จ: "+e.message+" — ตรวจสอบ URL, API key และการ Deploy Apps Script","error");}
+}
+function openToolDialog(){$("#toolForm").reset();$("#toolDialog").showModal();}
+function openActionDialog(type,serial){
+  const t=state.tools.find(x=>x.serial===serial);if(!t)return;
+  const f=$("#actionForm");f.reset();f.elements.actionType.value=type;f.elements.serial.value=serial;
+  $("#actionTitle").textContent=type==="move"?"Move Tool":"Swap Tool";
+  $("#actionDescription").textContent=`Tool ${t.toolModel} (${t.serial}) อยู่ที่ ${t.line}`;
+  $("#destinationLabel").classList.toggle("hidden",type!=="move");$("#swapLabel").classList.toggle("hidden",type!=="swap");
+  $("#confirmActionBtn").textContent=type==="move"?"ยืนยันการย้าย":"ยืนยันการสลับ";
+  $("#destinationSelect").value=t.line;
+  $("#swapSerialSelect").innerHTML=state.tools.filter(x=>x.serial!==serial).map(x=>`<option value="${esc(x.serial)}">${esc(x.serial)} — ${esc(x.toolModel)} (${esc(x.line)})</option>`).join("");
+  $("#actionDialog").showModal();
+}
+async function submitAdd(e){
+  e.preventDefault();if(state.busy)return;const fd=new FormData(e.currentTarget);const data=Object.fromEntries(fd.entries());
+  data.action="addTool";data.serial=data.serial.trim();data.tightenings=data.tightenings?Number(data.tightenings):"";
+  if(!data.serial){showNotice("กรุณาระบุ Serial No.","error");return;}
+  if(state.tools.some(t=>t.serial.toLowerCase()===data.serial.toLowerCase())){showNotice("Serial No. นี้มีอยู่แล้ว กรุณาตรวจสอบข้อมูล","error");return;}
+  await runMutation("กำลังเพิ่ม Tool...",async()=>{await apiWrite(data);$("#toolDialog").close();showNotice("ส่งคำสั่งเพิ่ม Tool แล้ว ระบบโหลดข้อมูลล่าสุดจาก Google Sheets แล้ว","success");});
+}
+async function submitAction(e){
+  e.preventDefault();if(state.busy)return;const fd=new FormData(e.currentTarget);const data=Object.fromEntries(fd.entries());
+  if(data.actionType==="move"){
+    if(!data.destination){showNotice("กรุณาเลือก Line ปลายทาง","error");return;}
+    data.action="moveTool";data.toLine=data.destination;delete data.destination;delete data.actionType;
+    const t=state.tools.find(x=>x.serial===data.serial);if(t&&t.line===data.toLine){showNotice("Tool อยู่ใน Line นี้อยู่แล้ว","");return;}
+    if(!confirm(`ยืนยันย้าย Tool ${data.serial} ไปยัง ${data.toLine} ?`))return;
+  }else{
+    data.action="swapTools";data.serialA=data.serial;data.serialB=data.swapSerial;delete data.serial;delete data.swapSerial;delete data.actionType;
+    if(!data.serialB){showNotice("ไม่มี Tool อื่นให้สลับ","error");return;}
+    if(!confirm(`ยืนยันสลับตำแหน่ง Tool ${data.serialA} กับ ${data.serialB} ?`))return;
+  }
+  await runMutation("กำลังบันทึกการเปลี่ยนตำแหน่ง...",async()=>{await apiWrite(data);$("#actionDialog").close();showNotice("ส่งคำสั่งแล้ว และโหลดข้อมูลล่าสุดจาก Google Sheets แล้ว","success");});
+}
+async function runMutation(msg,fn){
+  state.busy=true;showNotice(msg);
+  try{await fn();}catch(e){showNotice("ไม่สามารถยืนยันผลการบันทึกได้: "+e.message+" กรุณากด Refresh และตรวจสอบ Movement History ก่อนส่งคำสั่งซ้ำ","error");}
+  finally{state.busy=false;}
+}
+function openSettings(){
+  const f=$("#settingsForm");f.elements.apiUrl.value=state.apiUrl;f.elements.apiKey.value=state.apiKey;$("#settingsDialog").showModal();
+}
+function init(){
+  populateLines();
+  document.addEventListener("click",e=>{
+    const close=e.target.closest("[data-close]");if(close){$("#"+close.dataset.close).close();return;}
+    const nav=e.target.closest("[data-view]");if(nav){setView(nav.dataset.view);return;}
+    const line=e.target.closest("[data-line]");if(line){setView("line",line.dataset.line);return;}
+    const action=e.target.closest("[data-action]");if(action){openActionDialog(action.dataset.action,action.dataset.serial);return;}
+  });
+  $("#addToolBtn").addEventListener("click",()=>{if(!hasApi()){openSettings();return;}openToolDialog();});
+  $("#toolForm").addEventListener("submit",submitAdd);$("#actionForm").addEventListener("submit",submitAction);
+  $("#refreshBtn").addEventListener("click",refreshAll);$("#refreshHistoryBtn").addEventListener("click",refreshAll);
+  ["searchInput","lineFilter","statusFilter","sortSelect"].forEach(id=>$("#"+id).addEventListener("input",renderTools));
+  $("#settingsForm").addEventListener("submit",e=>{e.preventDefault();const fd=new FormData(e.currentTarget);state.apiUrl=String(fd.get("apiUrl")).trim();state.apiKey=String(fd.get("apiKey")).trim();$("#settingsDialog").close();refreshAll();});
+  $("#mobileMenu").addEventListener("click",()=>$("#sidebar").classList.toggle("open"));
+  // Settings can be opened with Alt+S. Credentials remain in this tab's memory only.
+  document.addEventListener("keydown",e=>{if(e.altKey&&e.key.toLowerCase()==="s"){e.preventDefault();openSettings();}});
+  setView("dashboard");
+  // Attempt read if credentials are already entered in this page session.
+  renderAll();
+}
+init();

@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="th">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>e-Data Base ATLAS</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar" id="sidebar">
+      <div class="brand">
+        <div class="brand-mark">A</div>
+        <div><strong>e-Data Base</strong><span>ATLAS TOOL MANAGEMENT</span></div>
+      </div>
+      <button class="nav-item active" data-view="dashboard"><span>▦</span> Dashboard</button>
+      <div class="nav-heading">LINE</div>
+      <nav id="lineNav" class="line-nav"></nav>
+      <div class="nav-heading">OTHER</div>
+      <button class="nav-item" data-view="backup"><span>▣</span> Back up <span class="nav-count" id="backupCount">0</span></button>
+      <button class="nav-item" data-view="history"><span>↻</span> Movement History</button>
+      <div class="sidebar-bottom">
+        <span class="status-dot"></span><span id="connectionLabel">กำลังตรวจสอบการเชื่อมต่อ</span>
+      </div>
+    </aside>
+
+    <main class="main">
+      <header class="topbar">
+        <button class="mobile-menu" id="mobileMenu" aria-label="เปิดเมนู">☰</button>
+        <div>
+          <div class="eyebrow">ATLAS TOOL MANAGEMENT SYSTEM</div>
+          <h1 id="pageTitle">Dashboard</h1>
+        </div>
+        <div class="top-actions">
+          <span class="last-updated" id="lastUpdated">ยังไม่ได้โหลดข้อมูล</span>
+          <button class="btn btn-primary" id="addToolBtn">＋ Add Tool</button>
+        </div>
+      </header>
+
+      <section id="notice" class="notice hidden" role="status"></section>
+
+      <section id="dashboardView">
+        <div class="stats-grid">
+          <article class="stat-card"><div class="stat-icon blue">▣</div><div><span>Total Tools</span><strong id="totalTools">—</strong><small>เครื่องมือทั้งหมด</small></div></article>
+          <article class="stat-card"><div class="stat-icon green">✓</div><div><span>Calibration OK</span><strong id="calOk">—</strong><small>ยังไม่ถึงกำหนด</small></div></article>
+          <article class="stat-card"><div class="stat-icon orange">◷</div><div><span>Due Soon</span><strong id="dueSoon">—</strong><small>ภายใน 30 วัน</small></div></article>
+          <article class="stat-card"><div class="stat-icon red">!</div><div><span>Overdue</span><strong id="overdue">—</strong><small>เกินกำหนด Calibration</small></div></article>
+        </div>
+        <div class="panel">
+          <div class="panel-header">
+            <div><h2 id="tableHeading">Tool List</h2><p>จัดการข้อมูลและตำแหน่งของเครื่องมือ ATLAS</p></div>
+            <button class="btn btn-secondary" id="refreshBtn">↻ Refresh</button>
+          </div>
+          <div class="filters">
+            <label class="search-box"><span>⌕</span><input id="searchInput" type="search" placeholder="ค้นหา Serial, Model, Process, IP..."></label>
+            <select id="lineFilter" aria-label="กรองตาม Line"><option value="">ทุก Line</option></select>
+            <select id="statusFilter" aria-label="กรองตาม Calibration"><option value="">ทุกสถานะ Calibration</option><option value="ok">OK</option><option value="soon">Due Soon</option><option value="overdue">Overdue</option><option value="unknown">ไม่ระบุวันที่</option></select>
+            <select id="sortSelect" aria-label="เรียงลำดับ"><option value="line">เรียงตาม Line</option><option value="serial">เรียงตาม Serial</option><option value="calibration">เรียงตามวัน Calibration</option></select>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Tool / Serial No.</th><th>Line / Location</th><th>Process</th><th>Controller</th><th>IP Address</th><th>Next Calibration</th><th>Status</th><th>Actions</th></tr></thead>
+              <tbody id="toolTableBody"><tr><td colspan="8" class="empty">กำลังโหลดข้อมูล...</td></tr></tbody>
+            </table>
+          </div>
+          <div class="table-footer"><span id="resultCount">0 รายการ</span><span>ข้อมูลอ้างอิงจาก Google Sheets</span></div>
+        </div>
+      </section>
+
+      <section id="historyView" class="hidden">
+        <div class="panel">
+          <div class="panel-header"><div><h2>Movement History</h2><p>ประวัติการเพิ่ม ย้าย และสลับตำแหน่ง Tool</p></div><button class="btn btn-secondary" id="refreshHistoryBtn">↻ Refresh</button></div>
+          <div class="table-wrap"><table><thead><tr><th>วันที่/เวลา</th><th>Action</th><th>Tool Serial</th><th>จาก</th><th>ไปยัง</th><th>รายละเอียด</th><th>ผู้ดำเนินการ</th></tr></thead><tbody id="historyBody"><tr><td colspan="7" class="empty">กำลังโหลดประวัติ...</td></tr></tbody></table></div>
+        </div>
+      </section>
+      <footer>e-Data Base ATLAS <span>•</span> Google Sheets API</footer>
+    </main>
+  </div>
+
+  <dialog id="toolDialog" class="modal">
+    <form id="toolForm" method="dialog">
+      <div class="modal-header"><div><div class="eyebrow">TOOL INFORMATION</div><h2>Add New Tool</h2></div><button type="button" class="icon-btn" data-close="toolDialog" aria-label="ปิด">×</button></div>
+      <div class="form-grid">
+        <label>Tool Model <input name="toolModel" required placeholder="ETV ST61-40-10"></label>
+        <label>Tools MS Serial No. <input name="serial" required placeholder="C1541359"></label>
+        <label>Line / Location <select name="line" required id="addLineSelect"></select></label>
+        <label>Process <input name="process" placeholder="Ass'y F/C Normal M4"></label>
+        <label>Controller <input name="controller" placeholder="PF4000"></label>
+        <label>IP Address <input name="ipAddress" placeholder="192.168.0.11"></label>
+        <label>Total No. of Tightenings <input name="tightenings" type="number" min="0" placeholder="1700000"></label>
+        <label>Current Calibration Date <input name="currentCalibration" type="date"></label>
+        <label>Next Calibration Date <input name="nextCalibration" type="date"></label>
+        <label class="full">Notes <textarea name="notes" rows="2" placeholder="หมายเหตุเพิ่มเติม"></textarea></label>
+      </div>
+      <div class="modal-actions"><button type="button" class="btn btn-secondary" data-close="toolDialog">ยกเลิก</button><button type="submit" class="btn btn-primary">บันทึก Tool</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="actionDialog" class="modal compact">
+    <form id="actionForm" method="dialog">
+      <div class="modal-header"><div><div class="eyebrow">TOOL LOCATION</div><h2 id="actionTitle">Move Tool</h2></div><button type="button" class="icon-btn" data-close="actionDialog" aria-label="ปิด">×</button></div>
+      <p id="actionDescription" class="muted"></p>
+      <input type="hidden" name="actionType">
+      <input type="hidden" name="serial">
+      <label id="destinationLabel">ตำแหน่งปลายทาง <select name="destination" id="destinationSelect"></select></label>
+      <label id="swapLabel" class="hidden">เลือก Tool ที่ต้องการสลับ <select name="swapSerial" id="swapSerialSelect"></select></label>
+      <div class="warning-note">ระบบจะบันทึกตำแหน่งใหม่และประวัติการเปลี่ยนแปลงลง Google Sheets</div>
+      <div class="modal-actions"><button type="button" class="btn btn-secondary" data-close="actionDialog">ยกเลิก</button><button type="submit" class="btn btn-primary" id="confirmActionBtn">ยืนยัน</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="settingsDialog" class="modal compact">
+    <form id="settingsForm" method="dialog">
+      <div class="modal-header"><div><div class="eyebrow">API CONNECTION</div><h2>ตั้งค่าการเชื่อมต่อ</h2></div><button type="button" class="icon-btn" data-close="settingsDialog">×</button></div>
+      <p class="muted">ใส่ URL ของ Apps Script Web App และ API key ที่ตั้งไว้ใน Script Properties ระบบจะเก็บไว้เฉพาะในหน่วยความจำของแท็บนี้ ไม่บันทึกลง source code</p>
+      <label>Apps Script Web App URL <input name="apiUrl" type="url" required placeholder="https://script.google.com/macros/s/.../exec"></label>
+      <label>API Key <input name="apiKey" required type="password" autocomplete="off" placeholder="API key ที่ตั้งไว้ใน Script Properties"></label>
+      <div class="modal-actions"><button type="button" class="btn btn-secondary" data-close="settingsDialog">ยกเลิก</button><button type="submit" class="btn btn-primary">เชื่อมต่อ</button></div>
+    </form>
+  </dialog>
+
+  <script src="script.js"></script>
+</body>
+</html>
