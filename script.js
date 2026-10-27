@@ -7,19 +7,31 @@ const LINES = [
   "TOYOTA 500D P8",
   "TOYOTA 500D COVERING",
   "ISUZU RT50",
-  "Back up"
+  "Back up",
+  "Damage"
 ];
 const BACKUP = "Back up";
 const $ = (s) => document.querySelector(s);
 const state = { tools: [], history: [], view: "dashboard", selectedLine: "", apiUrl: "", apiKey: "", busy: false };
+
 function saveApiSettings() {
-  localStorage.setItem("atlas_api_url", state.apiUrl);
-  localStorage.setItem("atlas_api_key", state.apiKey);
+  try {
+    localStorage.setItem("atlas_api_url", state.apiUrl);
+    localStorage.setItem("atlas_api_key", state.apiKey);
+  } catch (e) {
+    console.warn("ไม่สามารถบันทึกการตั้งค่าในเบราว์เซอร์ได้", e);
+  }
 }
 
 function loadApiSettings() {
-  state.apiUrl = localStorage.getItem("atlas_api_url") || "";
-  state.apiKey = localStorage.getItem("atlas_api_key") || "";
+  try {
+    state.apiUrl = localStorage.getItem("atlas_api_url") || "";
+    state.apiKey = localStorage.getItem("atlas_api_key") || "";
+  } catch (e) {
+    state.apiUrl = "";
+    state.apiKey = "";
+    console.warn("ไม่สามารถอ่านการตั้งค่าจากเบราว์เซอร์ได้", e);
+  }
 }
 const aliasMap = {
   toolModel: ["tools model","tool model","model","tool_model","model tool"],
@@ -35,6 +47,13 @@ const aliasMap = {
   updatedAt: ["updated at","last updated"]
 };
 function normalizeHeader(v){ return String(v ?? "").trim().toLowerCase().replace(/[_\-]+/g," ").replace(/\s+/g," "); }
+function normalizeLineName(value) {
+  return String(value || "")
+    .normalize("NFKC")
+    .replace(/\\s+/g, " ")
+    .trim()
+    .toLowerCase();
+}
 function findVal(obj, keys){ const wanted = keys.map(normalizeHeader); for(const k of Object.keys(obj||{})){if(wanted.includes(normalizeHeader(k))) return obj[k];} return ""; }
 function normalizeTool(raw){
   const out = {...raw};
@@ -121,8 +140,12 @@ function setView(view,line=""){
 function currentTools(){
   let arr=[...state.tools];const search=$("#searchInput").value.trim().toLowerCase(),line=$("#lineFilter").value,status=$("#statusFilter").value,sort=$("#sortSelect").value;
   if(state.view==="backup")arr=arr.filter(t=>t.line.toLowerCase()===BACKUP.toLowerCase());
-  else if(state.selectedLine)arr=arr.filter(t=>t.line===state.selectedLine);
-  if(line)arr=arr.filter(t=>t.line===line);
+  else if(state.selectedLine) {
+    arr = arr.filter(t => normalizeLineName(t.line) === normalizeLineName(state.selectedLine));
+  }
+  if(line) {
+    arr = arr.filter(t => normalizeLineName(t.line) === normalizeLineName(line));
+  }
   if(search)arr=arr.filter(t=>[t.toolModel,t.serial,t.process,t.ipAddress,t.controller,t.line].some(v=>String(v||"").toLowerCase().includes(search)));
   if(status)arr=arr.filter(t=>calStatus(t).key===status);
   arr.sort((a,b)=>sort==="serial"?a.serial.localeCompare(b.serial):sort==="calibration"?((dateValue(a.nextCalibration)||new Date(8640000000000000))-(dateValue(b.nextCalibration)||new Date(8640000000000000))):a.line.localeCompare(b.line)||a.serial.localeCompare(b.serial));
@@ -223,11 +246,20 @@ function init(){
   $("#toolForm").addEventListener("submit",submitAdd);$("#actionForm").addEventListener("submit",submitAction);
   $("#refreshBtn").addEventListener("click",refreshAll);$("#refreshHistoryBtn").addEventListener("click",refreshAll);
   ["searchInput","lineFilter","statusFilter","sortSelect"].forEach(id=>$("#"+id).addEventListener("input",renderTools));
-  $("#settingsForm").addEventListener("submit",e=>{e.preventDefault();const fd=new FormData(e.currentTarget);state.apiUrl=String(fd.get("apiUrl")).trim();state.apiKey=String(fd.get("apiKey")).trim();saveApiSettings();$("#settingsDialog").close();refreshAll();});
+  $("#settingsForm").addEventListener("submit", e => {
+    e.preventDefault();
+    const fd = new FormData(e.currentTarget);
+    state.apiUrl = String(fd.get("apiUrl")).trim();
+    state.apiKey = String(fd.get("apiKey")).trim();
+    saveApiSettings();
+    $("#settingsDialog").close();
+    refreshAll();
+  });
   $("#mobileMenu").addEventListener("click",()=>$("#sidebar").classList.toggle("open"));
-  // Settings can be opened with Alt+S. Credentials remain in this tab's memory only.
+  // Settings can be opened with Alt+S. API settings are saved in this browser's localStorage.
   document.addEventListener("keydown",e=>{if(e.altKey&&e.key.toLowerCase()==="s"){e.preventDefault();openSettings();}});
-   loadApiSettings();
+  // Restore saved API settings and load Google Sheets automatically on page refresh.
+  loadApiSettings();
   setView("dashboard");
   refreshAll();
 }
