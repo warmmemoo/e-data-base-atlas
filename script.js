@@ -120,7 +120,15 @@ async function apiWrite(payload){
   return true;
 }
 function populateLines(){
-  $("#lineNav").innerHTML=LINES.filter(x=>x!==BACKUP).map(x=>`<button class="nav-item line-item" data-line="${esc(x)}"><span>◦</span>${esc(x)}</button>`).join("");
+  // Production lines stay under LINE; Back up and Damage belong under OTHER.
+  $("#lineNav").innerHTML=LINES.filter(x=>x!==BACKUP && x!=="Damage").map(x=>`<button class="nav-item line-item" data-line="${esc(x)}"><span>◦</span>${esc(x)}</button>`).join("");
+
+  // Place Damage directly below Back up in the OTHER section of the sidebar.
+  const backupNav = document.querySelector('[data-view="backup"]');
+  if (backupNav && !document.querySelector('[data-line="Damage"]')) {
+    backupNav.insertAdjacentHTML("afterend", `<button class="nav-item line-item" data-line="Damage"><span>◦</span>Damage</button>`);
+  }
+
   $("#lineFilter").innerHTML='<option value="">ทุก Line</option>'+LINES.map(x=>`<option value="${esc(x)}">${esc(x)}</option>`).join("");
   $("#addLineSelect").innerHTML=LINES.map(x=>`<option value="${esc(x)}">${esc(x)}</option>`).join("");
   $("#destinationSelect").innerHTML=LINES.map(x=>`<option value="${esc(x)}">${esc(x)}</option>`).join("");
