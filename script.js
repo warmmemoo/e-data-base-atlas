@@ -12,6 +12,15 @@ const LINES = [
 const BACKUP = "Back up";
 const $ = (s) => document.querySelector(s);
 const state = { tools: [], history: [], view: "dashboard", selectedLine: "", apiUrl: "", apiKey: "", busy: false };
+function saveApiSettings() {
+  localStorage.setItem("atlas_api_url", state.apiUrl);
+  localStorage.setItem("atlas_api_key", state.apiKey);
+}
+
+function loadApiSettings() {
+  state.apiUrl = localStorage.getItem("atlas_api_url") || "";
+  state.apiKey = localStorage.getItem("atlas_api_key") || "";
+}
 const aliasMap = {
   toolModel: ["tools model","tool model","model","tool_model","model tool"],
   serial: ["tools ms serial no.","tools ms serial number","serial no","serial number","serial","tool serial","tool ms serial no","serial no."],
@@ -214,12 +223,12 @@ function init(){
   $("#toolForm").addEventListener("submit",submitAdd);$("#actionForm").addEventListener("submit",submitAction);
   $("#refreshBtn").addEventListener("click",refreshAll);$("#refreshHistoryBtn").addEventListener("click",refreshAll);
   ["searchInput","lineFilter","statusFilter","sortSelect"].forEach(id=>$("#"+id).addEventListener("input",renderTools));
-  $("#settingsForm").addEventListener("submit",e=>{e.preventDefault();const fd=new FormData(e.currentTarget);state.apiUrl=String(fd.get("apiUrl")).trim();state.apiKey=String(fd.get("apiKey")).trim();$("#settingsDialog").close();refreshAll();});
+  $("#settingsForm").addEventListener("submit",e=>{e.preventDefault();const fd=new FormData(e.currentTarget);state.apiUrl=String(fd.get("apiUrl")).trim();state.apiKey=String(fd.get("apiKey")).trim();saveApiSettings();$("#settingsDialog").close();refreshAll();});
   $("#mobileMenu").addEventListener("click",()=>$("#sidebar").classList.toggle("open"));
   // Settings can be opened with Alt+S. Credentials remain in this tab's memory only.
   document.addEventListener("keydown",e=>{if(e.altKey&&e.key.toLowerCase()==="s"){e.preventDefault();openSettings();}});
+   loadApiSettings();
   setView("dashboard");
-  // Attempt read if credentials are already entered in this page session.
-  renderAll();
+  refreshAll();
 }
 init();
