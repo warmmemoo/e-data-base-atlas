@@ -202,9 +202,6 @@ function populateLines(){
     `<button class="nav-item line-item" data-line="${esc(x)}"><span>◦</span>${esc(x)}</button>`
   ).join("");
 
-  $("#lineFilter").innerHTML = '<option value="">ทุก Line</option>' + LINES.map(x =>
-    `<option value="${esc(x)}">${esc(x)}</option>`
-  ).join("");
   $("#addLineSelect").innerHTML = LINES.map(x =>
     `<option value="${esc(x)}">${esc(x)}</option>`
   ).join("");
@@ -533,4 +530,3 @@ function init(){
   refreshAll();
 }
 init();
-
