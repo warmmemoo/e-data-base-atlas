@@ -33,7 +33,7 @@
         </div>
         <div class="top-actions">
           <span class="last-updated" id="lastUpdated">ยังไม่ได้โหลดข้อมูล</span>
-          <button class="btn btn-primary" id="addToolBtn">＋ Add Tool</button>
+          <button class="btn btn-primary" id="adminBtn">Admin Login</button>
         </div>
       </header>
 
@@ -93,6 +93,37 @@
         <label class="full">Notes <textarea name="notes" rows="2" placeholder="หมายเหตุเพิ่มเติม"></textarea></label>
       </div>
       <div class="modal-actions"><button type="button" class="btn btn-secondary" data-close="toolDialog">ยกเลิก</button><button type="submit" class="btn btn-primary">บันทึก Tool</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="adminLoginDialog" class="modal compact">
+    <form id="adminLoginForm" method="dialog">
+      <div class="modal-header"><div><div class="eyebrow">ADMIN ACCESS</div><h2>เข้าสู่ระบบ Admin</h2></div><button type="button" class="icon-btn" data-close="adminLoginDialog" aria-label="ปิด">×</button></div>
+      <p class="muted">กรอกรหัสผ่าน Admin เพื่อเปิดสิทธิ์แก้ไขข้อมูล เครื่องมือจะบันทึกกลับไปยัง Google Sheets โดยตรง</p>
+      <label>Admin Password <input name="adminPassword" type="password" required autocomplete="current-password" placeholder="รหัสผ่าน Admin"></label>
+      <div class="modal-actions"><button type="button" class="btn btn-secondary" data-close="adminLoginDialog">ยกเลิก</button><button type="submit" class="btn btn-primary">เข้าสู่ระบบ</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="editToolDialog" class="modal">
+    <form id="editToolForm" method="dialog">
+      <div class="modal-header"><div><div class="eyebrow">ADMIN · EDIT TOOL</div><h2>แก้ไขข้อมูล Tool</h2></div><button type="button" class="icon-btn" data-close="editToolDialog" aria-label="ปิด">×</button></div>
+      <input type="hidden" name="originalSerial">
+      <div class="form-grid">
+        <label>Line / Location <select name="line" id="editLineSelect" required></select></label>
+        <label>No. <input name="rowNo" type="text"></label>
+        <label>Tools Model <input name="toolModel" required></label>
+        <label>Tools MS Serial No. <input name="serial" required></label>
+        <label>Status <input name="status" placeholder="เช่น ใช้งาน / ซ่อม / Damage"></label>
+        <label>Process <input name="process"></label>
+        <label>Total No. of Tightenings <input name="tightenings" type="number" min="0"></label>
+        <label>IP Address <input name="ipAddress"></label>
+        <label>Controller <input name="controller"></label>
+        <label>Current Calibration <input name="currentCalibration" type="date"></label>
+        <label>Next Calibration <input name="nextCalibration" type="date"></label>
+      </div>
+      <div class="warning-note">การบันทึกจะเปลี่ยนข้อมูลใน Google Sheets ทันที กรุณาตรวจสอบ Serial No. และวันที่ก่อนบันทึก</div>
+      <div class="modal-actions"><button type="button" class="btn btn-secondary" data-close="editToolDialog">ยกเลิก</button><button type="submit" class="btn btn-primary">บันทึกข้อมูล</button></div>
     </form>
   </dialog>
 
