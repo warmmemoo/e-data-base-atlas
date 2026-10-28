@@ -394,3 +394,66 @@ async function deleteToolRecord(button){
   if(!state.isAdmin){showNotice("กรุณาเข้าสู่ระบบ Admin ก่อนลบข้อมูล","error");return;}
   if(state.busy)return;
   const sheetRow=Number(button.dataset.row);
+  const serial=button.dataset.serial||"";
+  const model=button.dataset.model||"";
+  const line=button.dataset.line||"";
+  const identity=serial ? `${model} (Serial: ${serial})` : model;
+  const confirmed=confirm(`ยืนยันลบ ${identity || "รายการนี้"} จาก Line/หมวด "${line}" หรือไม่?\n\nระบบจะลบแถวนี้ออกจาก Google Sheets จริง และไม่สามารถกู้คืนจากหน้าเว็บได้`);
+  if(!confirmed)return;
+  await runMutation("กำลังลบข้อมูลจาก Google Sheets...",async()=>{
+    await apiWrite({
+      action:"deleteTool",
+      adminSessionId:state.adminSessionId,
+      sheetRow:sheetRow,
+      expectedSerial:serial,
+      expectedModel:model,
+      expectedLine:line
+    });
+    showNotice(`ลบ ${identity || "รายการ"} ออกจาก Google Sheets แล้ว`,"success");
+  });
+}
+
+function openSettings(){
+  const f=$("#settingsForm");f.elements.apiUrl.value=state.apiUrl;f.elements.apiKey.value=state.apiKey;$("#settingsDialog").showModal();
+}
+function init(){
+  populateLines();
+  document.addEventListener("click",e=>{
+    const close=e.target.closest("[data-close]");if(close){$("#"+close.dataset.close).close();return;}
+    const nav=e.target.closest("[data-view]");if(nav){setView(nav.dataset.view);return;}
+    const line=e.target.closest("[data-line]");if(line){setView("line",line.dataset.line);return;}
+    const action=e.target.closest("[data-action]");if(action){if(action.dataset.action==="edit")openEditDialog(action.dataset.serial);else if(action.dataset.action==="delete")deleteToolRecord(action);else openActionDialog(action.dataset.action,action.dataset.serial);return;}
+  });
+  $("#adminBtn").addEventListener("click",()=>{
+    if(state.isAdmin){if(confirm("ต้องการออกจากระบบ Admin หรือไม่?"))adminLogout();return;}
+    if(!hasApi()){openSettings();return;}
+    $("#adminLoginForm").reset();$("#adminLoginDialog").showModal();
+  });
+  $("#adminLoginForm").addEventListener("submit",async e=>{
+    e.preventDefault();const password=String(new FormData(e.currentTarget).get("adminPassword")||"");
+    try{await adminLogin(password);$("#adminLoginDialog").close();showNotice("เข้าสู่ระบบ Admin สำเร็จ สามารถแก้ไขข้อมูล Tool ได้","success");}
+    catch(err){showNotice("เข้าสู่ระบบ Admin ไม่สำเร็จ: "+err.message,"error");}
+    e.currentTarget.reset();
+  });
+  $("#editToolForm").addEventListener("submit",submitEdit);
+  $("#actionForm").addEventListener("submit",submitAction);
+  $("#refreshBtn").addEventListener("click",refreshAll);$("#refreshHistoryBtn").addEventListener("click",refreshAll);
+  ["searchInput","lineFilter","statusFilter","sortSelect"].forEach(id=>$("#"+id).addEventListener("input",renderTools));
+  $("#settingsForm").addEventListener("submit", e => {
+    e.preventDefault();
+    const fd = new FormData(e.currentTarget);
+    state.apiUrl = String(fd.get("apiUrl")).trim();
+    state.apiKey = String(fd.get("apiKey")).trim();
+    saveApiSettings();
+    $("#settingsDialog").close();
+    refreshAll();
+  });
+  $("#mobileMenu").addEventListener("click",()=>$("#sidebar").classList.toggle("open"));
+  // Settings can be opened with Alt+S. API settings are saved in this browser's localStorage.
+  document.addEventListener("keydown",e=>{if(e.altKey&&e.key.toLowerCase()==="s"){e.preventDefault();openSettings();}});
+  // Restore saved API settings and load Google Sheets automatically on page refresh.
+  loadApiSettings();
+  setView("dashboard");
+  refreshAll();
+}
+init();
