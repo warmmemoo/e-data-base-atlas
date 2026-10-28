@@ -257,13 +257,14 @@ function renderTools(){
     const editButton=state.isAdmin && t.serial?`<button class="mini-btn" data-action="edit" data-serial="${esc(t.serial)}">Edit</button>`:"";
     const damageButton=isDamage || !t.serial?"":`<button class="mini-btn danger-action" data-action="damage" data-serial="${esc(t.serial)}">Damage</button>`;
     const moveButton=t.serial?`<button class="mini-btn" data-action="move" data-serial="${esc(t.serial)}">Move</button>`:"";
+    const transferToBackupButton=isDamage && t.serial?`<button class="mini-btn" data-action="transferToBackup" data-serial="${esc(t.serial)}">Transfer to Back up</button>`:"";
     const deleteButton=state.isAdmin?`<button type="button" class="mini-btn danger-action" data-action="delete" data-row="${esc(t._row)}" data-serial="${esc(t.serial)}" data-model="${esc(t.toolModel)}" data-line="${esc(t.line)}" onclick="return window.atlasDeleteClick(this, event)">Delete</button>`:"";
     return `<tr>
       <td><div class="tool-name">${esc(t.toolModel||"ไม่ระบุ Model")}</div><div class="tool-serial">${esc(t.serial||"ไม่มี Serial")}</div></td>
       <td><span class="line-pill" title="${esc(t.line)}">${esc(t.line)}</span></td>
       <td>${esc(t.process||"—")}</td><td>${esc(t.controller||"—")}</td><td>${esc(t.ipAddress||"—")}</td>
       <td>${esc(fmtDate(t.currentCalibration))}</td><td>${esc(fmtDate(t.nextCalibration))}</td><td>${statusBadge}</td>
-      <td><div class="row-actions">${editButton}${damageButton}${moveButton}${deleteButton}${(!editButton&&!damageButton&&!moveButton&&!deleteButton)?'<span class="muted">—</span>':""}</div></td>
+      <td><div class="row-actions">${editButton}${damageButton}${moveButton}${transferToBackupButton}${deleteButton}${(!editButton&&!damageButton&&!moveButton&&!transferToBackupButton&&!deleteButton)?'<span class="muted">—</span>':""}</div></td>
     </tr>`;
   }).join("");
 }
@@ -490,6 +491,17 @@ function init(){
     if(action){
       e.preventDefault();
       if(action.dataset.action==="edit"){openEditDialog(action.dataset.serial);}
+      else if(action.dataset.action==="transferToBackup"){
+        const serial=action.dataset.serial;
+        const tool=state.tools.find(t=>t.serial===serial);
+        if(!tool){showNotice("ไม่พบ Tool ที่เลือก กรุณากด Refresh","error");return;}
+        if(normalizeLineName(tool.line)!=="damage"){showNotice("คำสั่งนี้ใช้ได้เฉพาะ Tool ในหมวด Damage","error");return;}
+        if(!confirm(`ยืนยันย้าย Tool ${tool.toolModel} (${tool.serial}) จาก Damage ไป Back up tool? ข้อมูลอื่นจะคงเดิม`))return;
+        await runMutation("กำลังย้าย Tool ไป Back up tool...",async()=>{
+          await apiWrite({action:"transferToBackup",serial:tool.serial});
+          showNotice("ย้าย Tool ไป Back up tool แล้ว","success");
+        });
+      }
       else if(action.dataset.action==="delete"){
         // Delete uses the button's direct click handler to ensure the confirmation opens.
         return;
