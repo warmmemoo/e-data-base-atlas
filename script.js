@@ -423,21 +423,25 @@ async function deleteToolRecord(button){
     normalizeLineName(t.line)===normalizeLineName(line)
   ).length;
   const beforeCount = sameRecordCount(state.tools);
-  await runMutation("กำลังลบข้อมูลจาก Google Sheets...",async()=>{
-    await apiWrite({
-      action:"deleteTool",
-      adminSessionId:state.adminSessionId,
-      sheetRow:sheetRow,
-      expectedSerial:serial,
-      expectedModel:model,
-      expectedLine:line
+  try {
+    await runMutation("กำลังลบข้อมูลจาก Google Sheets...",async()=>{
+      await apiWrite({
+        action:"deleteTool",
+        adminSessionId:state.adminSessionId,
+        sheetRow:sheetRow,
+        expectedSerial:serial,
+        expectedModel:model,
+        expectedLine:line
+      });
+      const afterCount = sameRecordCount(state.tools);
+      if(afterCount >= beforeCount){
+        throw new Error("ยังไม่พบการเปลี่ยนแปลงหลังโหลดข้อมูลจาก Google Sheets กรุณาตรวจสอบ Apps Script เวอร์ชันที่ Deploy และสิทธิ์ Admin");
+      }
+      showNotice(`ลบ ${identity || "รายการ"} ออกจาก Google Sheets แล้ว`,"success");
     });
-    const afterCount = sameRecordCount(state.tools);
-    if(afterCount >= beforeCount){
-      throw new Error("Google Sheets ยังมีรายการนี้อยู่ การลบอาจไม่สำเร็จ กรุณาตรวจสอบ Admin session / Apps Script deployment แล้วลองใหม่");
-    }
-    showNotice(`ลบ ${identity || "รายการ"} ออกจาก Google Sheets แล้ว`,"success");
-  });
+  } catch(err) {
+    showNotice(err?.message || String(err), "error");
+  }
 }
 
 function openSettings(){
@@ -445,11 +449,26 @@ function openSettings(){
 }
 function init(){
   populateLines();
-  document.addEventListener("click",e=>{
-    const close=e.target.closest("[data-close]");if(close){$("#"+close.dataset.close).close();return;}
-    const nav=e.target.closest("[data-view]");if(nav){setView(nav.dataset.view);return;}
-    const line=e.target.closest("[data-line]");if(line){setView("line",line.dataset.line);return;}
-    const action=e.target.closest("[data-action]");if(action){if(action.dataset.action==="edit")openEditDialog(action.dataset.serial);else if(action.dataset.action==="delete")deleteToolRecord(action);else openActionDialog(action.dataset.action,action.dataset.serial);return;}
+  document.addEventListener("click", async e=>{
+    const target = e.target instanceof Element ? e.target : e.target.parentElement;
+    if(!target) return;
+    const close=target.closest("[data-close]");if(close){$("#"+close.dataset.close).close();return;}
+    const nav=target.closest("[data-view]");if(nav){setView(nav.dataset.view);return;}
+    const line=target.closest("[data-line]");if(line){setView("line",line.dataset.line);return;}
+    const action=target.closest("[data-action]");
+    if(action){
+      e.preventDefault();
+      if(action.dataset.action==="edit"){openEditDialog(action.dataset.serial);}
+      else if(action.dataset.action==="delete"){
+        // Disable the clicked button immediately so repeated clicks cannot start duplicate requests.
+        if(action.disabled || state.busy) return;
+        action.disabled = true;
+        try { await deleteToolRecord(action); }
+        catch(err) { showNotice(err?.message || String(err), "error"); }
+        finally { if(action.isConnected) action.disabled = false; }
+      } else { openActionDialog(action.dataset.action,action.dataset.serial); }
+      return;
+    }
   });
   $("#adminBtn").addEventListener("click",()=>{
     if(state.isAdmin){if(confirm("ต้องการออกจากระบบ Admin หรือไม่?"))adminLogout();return;}
