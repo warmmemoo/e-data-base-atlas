@@ -231,12 +231,24 @@ function setView(view,line=""){
 function currentTools(){
   let arr=[...state.tools];
   const search=$("#searchInput").value.trim().toLowerCase(),line=$("#lineFilter").value,status=$("#statusFilter").value,sort=$("#sortSelect").value;
-  if(state.view==="backup")arr=arr.filter(t=>BACKUP_LINES.includes(String(t.line||"").trim()));
-  else if(state.selectedLine)arr=arr.filter(t=>normalizeLineName(t.line)===normalizeLineName(state.selectedLine));
+  if(state.view==="backup") {
+    arr=arr.filter(t=>BACKUP_LINES.includes(String(t.line||"").trim()));
+  } else if(state.view==="line" && state.selectedLine) {
+    // Only a specific Line page is restricted to that Line.
+    // Dashboard must always start with every tool, including Back up controller,
+    // Accessories, and Damage.
+    arr=arr.filter(t=>normalizeLineName(t.line)===normalizeLineName(state.selectedLine));
+  }
   if(line)arr=arr.filter(t=>normalizeLineName(t.line)===normalizeLineName(line));
   if(search)arr=arr.filter(t=>[t.toolModel,t.serial,t.process,t.ipAddress,t.controller,t.line].some(v=>String(v||"").toLowerCase().includes(search)));
   if(status)arr=arr.filter(t=>calStatus(t).key===status);
-  arr.sort((a,b)=>sort==="serial"?a.serial.localeCompare(b.serial):sort==="calibration"?((dateValue(a.nextCalibration)||new Date(8640000000000000))-(dateValue(b.nextCalibration)||new Date(8640000000000000))):a.line.localeCompare(b.line)||a.serial.localeCompare(b.serial));
+  const lineOrder = new Map(LINES.map((name,index)=>[normalizeLineName(name),index]));
+  arr.sort((a,b)=>sort==="serial"
+    ? String(a.serial||"").localeCompare(String(b.serial||""))
+    : sort==="calibration"
+      ? ((dateValue(a.nextCalibration)||new Date(8640000000000000))-(dateValue(b.nextCalibration)||new Date(8640000000000000)))
+      : (lineOrder.get(normalizeLineName(a.line)) ?? 999)-(lineOrder.get(normalizeLineName(b.line)) ?? 999)
+        || String(a.serial||"").localeCompare(String(b.serial||"")));
   return arr;
 }
 function renderTools(){
