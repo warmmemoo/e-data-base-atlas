@@ -16,8 +16,9 @@
       <button class="nav-item active" data-view="dashboard"><span>▦</span> Dashboard</button>
       <div class="nav-heading">LINE</div>
       <nav id="lineNav" class="line-nav"></nav>
-      <div class="nav-heading">OTHERS</div>
+      <div class="nav-heading">OTHER</div>
       <button class="nav-item" data-view="backup"><span>▣</span> Back up <span class="nav-count" id="backupCount">0</span></button>
+      <nav id="backupNav" class="line-nav backup-nav"></nav>
       <button class="nav-item" data-view="history"><span>↻</span> Movement History</button>
       <div class="sidebar-bottom">
         <span class="status-dot"></span><span id="connectionLabel">กำลังตรวจสอบการเชื่อมต่อ</span>
@@ -69,7 +70,7 @@
 
       <section id="historyView" class="hidden">
         <div class="panel">
-          <div class="panel-header"><div><h2>Movement History</h2><p>ประวัติการเพิ่ม ย้าย และสลับตำแหน่ง Tool</p></div><button class="btn btn-secondary" id="refreshHistoryBtn">↻ Refresh</button></div>
+          <div class="panel-header"><div><h2>Movement History</h2><p>ประวัติการเพิ่ม ย้าย Damage และสลับตำแหน่ง Tool</p></div><button class="btn btn-secondary" id="refreshHistoryBtn">↻ Refresh</button></div>
           <div class="table-wrap"><table><thead><tr><th>วันที่/เวลา</th><th>Action</th><th>Tool Serial</th><th>จาก</th><th>ไปยัง</th><th>รายละเอียด</th><th>ผู้ดำเนินการ</th></tr></thead><tbody id="historyBody"><tr><td colspan="7" class="empty">กำลังโหลดประวัติ...</td></tr></tbody></table></div>
         </div>
       </section>
@@ -99,7 +100,7 @@
   <dialog id="adminLoginDialog" class="modal compact">
     <form id="adminLoginForm" method="dialog">
       <div class="modal-header"><div><div class="eyebrow">ADMIN ACCESS</div><h2>เข้าสู่ระบบ Admin</h2></div><button type="button" class="icon-btn" data-close="adminLoginDialog" aria-label="ปิด">×</button></div>
-      <p class="muted">กรอกรหัสผ่าน Admin เพื่อเปิดสิทธิ์แก้ไขข้อมูลโดยตรง</p>
+      <p class="muted">กรอกรหัสผ่าน Admin เพื่อเปิดสิทธิ์แก้ไขข้อมูล เครื่องมือจะบันทึกกลับไปยัง Google Sheets โดยตรง</p>
       <label>Admin Password <input name="adminPassword" type="password" required autocomplete="current-password" placeholder="รหัสผ่าน Admin"></label>
       <div class="modal-actions"><button type="button" class="btn btn-secondary" data-close="adminLoginDialog">ยกเลิก</button><button type="submit" class="btn btn-primary">เข้าสู่ระบบ</button></div>
     </form>
@@ -133,8 +134,9 @@
       <p id="actionDescription" class="muted"></p>
       <input type="hidden" name="actionType">
       <input type="hidden" name="serial">
-      <label id="destinationLabel">ตำแหน่งปลายทาง <select name="destination" id="destinationSelect"></select></label>
-      <label id="swapLabel" class="hidden">เลือก Tool ที่ต้องการสลับ <select name="swapSerial" id="swapSerialSelect"></select></label>
+      <label id="destinationLabel" class="hidden">ตำแหน่งปลายทาง <select name="destination" id="destinationSelect"></select></label>
+      <label id="swapLabel" class="hidden">เลือก Tool ที่ต้องการสลับตำแหน่ง <select name="swapSerial" id="swapSerialSelect"></select></label>
+      <label id="backupReplaceLabel" class="hidden">เลือก Back up tool ที่จะนำมาแทน <select name="backupSerial" id="backupSerialSelect"></select></label>
       <div class="warning-note">ระบบจะบันทึกตำแหน่งใหม่และประวัติการเปลี่ยนแปลงลง Google Sheets</div>
       <div class="modal-actions"><button type="button" class="btn btn-secondary" data-close="actionDialog">ยกเลิก</button><button type="submit" class="btn btn-primary" id="confirmActionBtn">ยืนยัน</button></div>
     </form>
