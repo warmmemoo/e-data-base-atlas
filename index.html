@@ -19,6 +19,7 @@
       <div class="nav-heading">OTHER</div>
       <button class="nav-item" data-view="backup"><span>▣</span> Back up <span class="nav-count" id="backupCount">0</span></button>
       <nav id="backupNav" class="line-nav backup-nav"></nav>
+      <button class="nav-item line-item damage-nav-item" data-line="Damage"><span>◦</span> Damage</button>
       <button class="nav-item" data-view="history"><span>↻</span> Movement History</button>
       <div class="sidebar-bottom">
         <span class="status-dot"></span><span id="connectionLabel">กำลังตรวจสอบการเชื่อมต่อ</span>
@@ -54,7 +55,6 @@
           </div>
           <div class="filters">
             <label class="search-box"><span>⌕</span><input id="searchInput" type="search" placeholder="ค้นหา Serial, Model, Process, IP..."></label>
-            <select id="lineFilter" aria-label="กรองตาม Line"><option value="">ทุก Line</option></select>
             <select id="statusFilter" aria-label="กรองตาม Calibration"><option value="">ทุกสถานะ Calibration</option><option value="ok">OK</option><option value="soon">Due Soon</option><option value="overdue">Overdue</option><option value="unknown">ไม่ระบุวันที่</option></select>
             <select id="sortSelect" aria-label="เรียงลำดับ"><option value="line">เรียงตาม Line</option><option value="serial">เรียงตาม Serial</option><option value="calibration">เรียงตามวัน Calibration</option></select>
           </div>
