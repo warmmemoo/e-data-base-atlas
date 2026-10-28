@@ -12,7 +12,7 @@ const LINES = [
 ];
 const BACKUP = "Back up";
 const $ = (s) => document.querySelector(s);
-const state = { tools: [], history: [], view: "dashboard", selectedLine: "", apiUrl: "", apiKey: "", busy: false };
+const state = { tools: [], history: [], view: "dashboard", selectedLine: "", apiUrl: "", apiKey: "", busy: false, adminSessionId: "", isAdmin: false };
 
 function saveApiSettings() {
   try {
@@ -147,6 +147,49 @@ async function apiWrite(payload){
   renderAll();
   return true;
 }
+function makeSessionId(){
+  if(window.crypto && typeof window.crypto.randomUUID === "function") return window.crypto.randomUUID();
+  return "atlas-"+Date.now().toString(36)+"-"+Math.random().toString(36).slice(2)+Math.random().toString(36).slice(2);
+}
+async function postRaw(payload){
+  if(!hasApi()) throw new Error("ยังไม่ได้ตั้งค่า API");
+  await fetch(state.apiUrl,{method:"POST",mode:"no-cors",redirect:"follow",headers:{"Content-Type":"text/plain;charset=utf-8"},body:JSON.stringify({...payload,key:state.apiKey})});
+  await new Promise(r=>setTimeout(r,350));
+}
+async function adminLogin(password){
+  const sessionId=makeSessionId();
+  await postRaw({action:"adminLogin",adminPassword:password,sessionId});
+  const check=await apiRead("adminStatus",{sessionId});
+  if(!check.admin) throw new Error("รหัสผ่าน Admin ไม่ถูกต้อง หรือ Apps Script ยังไม่ได้อัปเดต");
+  state.adminSessionId=sessionId;state.isAdmin=true;
+  $("#adminBtn").textContent="Admin · Logout";
+  renderTools();
+}
+function adminLogout(){state.adminSessionId="";state.isAdmin=false;$("#adminBtn").textContent="Admin Login";renderTools();showNotice("ออกจากระบบ Admin แล้ว","success");}
+function dateInputValue(v){const d=dateValue(v);if(!d)return "";return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;}
+function openEditDialog(serial){
+  if(!state.isAdmin){showNotice("กรุณาเข้าสู่ระบบ Admin ก่อนแก้ไขข้อมูล","error");return;}
+  const t=state.tools.find(x=>x.serial===serial);if(!t)return;
+  const f=$("#editToolForm");f.reset();
+  for(const key of ["line","rowNo","toolModel","serial","status","process","tightenings","ipAddress","controller"]){if(f.elements[key])f.elements[key].value=t[key]??"";}
+  f.elements.originalSerial.value=t.serial;
+  f.elements.currentCalibration.value=dateInputValue(t.currentCalibration);
+  f.elements.nextCalibration.value=dateInputValue(t.nextCalibration);
+  $("#editToolDialog").showModal();
+}
+async function submitEdit(e){
+  e.preventDefault();if(!state.isAdmin){showNotice("Session Admin หมดอายุ กรุณาเข้าสู่ระบบใหม่","error");adminLogout();return;}
+  if(state.busy)return;
+  const fd=new FormData(e.currentTarget),data=Object.fromEntries(fd.entries());
+  data.action="updateTool";data.adminSessionId=state.adminSessionId;
+  data.tightenings=data.tightenings===""?"":Number(data.tightenings);
+  if(!data.serial.trim()||!data.toolModel.trim()){showNotice("กรุณากรอก Model และ Serial No.","error");return;}
+  if(!confirm(`ยืนยันบันทึกการแก้ไข Tool ${data.originalSerial} ลง Google Sheets?`))return;
+  await runMutation("กำลังบันทึกข้อมูล Tool ลง Google Sheets...",async()=>{
+    await apiWrite(data);$("#editToolDialog").close();showNotice("บันทึกข้อมูลลง Google Sheets แล้ว","success");
+  });
+}
+
 function populateLines(){
   // Production lines stay under LINE; Back up and Damage belong under OTHER.
   $("#lineNav").innerHTML=LINES.filter(x=>x!==BACKUP && x!=="Damage").map(x=>`<button class="nav-item line-item" data-line="${esc(x)}"><span>◦</span>${esc(x)}</button>`).join("");
@@ -159,6 +202,7 @@ function populateLines(){
 
   $("#lineFilter").innerHTML='<option value="">ทุก Line</option>'+LINES.map(x=>`<option value="${esc(x)}">${esc(x)}</option>`).join("");
   $("#addLineSelect").innerHTML=LINES.map(x=>`<option value="${esc(x)}">${esc(x)}</option>`).join("");
+  $("#editLineSelect").innerHTML=LINES.map(x=>`<option value="${esc(x)}">${esc(x)}</option>`).join("");
   $("#destinationSelect").innerHTML=LINES.map(x=>`<option value="${esc(x)}">${esc(x)}</option>`).join("");
 }
 function setView(view,line=""){
@@ -197,7 +241,7 @@ function renderTools(){
       <td><span class="line-pill" title="${esc(t.line)}">${esc(t.line)}</span></td>
       <td>${esc(t.process||"—")}</td><td>${esc(t.controller||"—")}</td><td>${esc(t.ipAddress||"—")}</td>
       <td>${esc(fmtDate(t.currentCalibration))}</td><td>${esc(fmtDate(t.nextCalibration))}</td><td><span class="cal-badge ${st.key}">${esc(st.label)}</span></td>
-      <td><div class="row-actions"><button class="mini-btn" data-action="move" data-serial="${esc(t.serial)}">Move</button><button class="mini-btn" data-action="swap" data-serial="${esc(t.serial)}">Swap</button></div></td>
+      <td><div class="row-actions">${state.isAdmin?`<button class="mini-btn" data-action="edit" data-serial="${esc(t.serial)}">Edit</button><button class="mini-btn" data-action="move" data-serial="${esc(t.serial)}">Move</button><button class="mini-btn" data-action="swap" data-serial="${esc(t.serial)}">Swap</button>`:"<span class=\"muted-inline\">Admin only</span>"}</div></td>
     </tr>`;
   }).join("");
 }
@@ -276,10 +320,21 @@ function init(){
     const close=e.target.closest("[data-close]");if(close){$("#"+close.dataset.close).close();return;}
     const nav=e.target.closest("[data-view]");if(nav){setView(nav.dataset.view);return;}
     const line=e.target.closest("[data-line]");if(line){setView("line",line.dataset.line);return;}
-    const action=e.target.closest("[data-action]");if(action){openActionDialog(action.dataset.action,action.dataset.serial);return;}
+    const action=e.target.closest("[data-action]");if(action){if(action.dataset.action==="edit")openEditDialog(action.dataset.serial);else if(state.isAdmin)openActionDialog(action.dataset.action,action.dataset.serial);else showNotice("กรุณาเข้าสู่ระบบ Admin ก่อนดำเนินการ","error");return;}
   });
-  $("#addToolBtn").addEventListener("click",()=>{if(!hasApi()){openSettings();return;}openToolDialog();});
-  $("#toolForm").addEventListener("submit",submitAdd);$("#actionForm").addEventListener("submit",submitAction);
+  $("#adminBtn").addEventListener("click",()=>{
+    if(state.isAdmin){if(confirm("ต้องการออกจากระบบ Admin หรือไม่?"))adminLogout();return;}
+    if(!hasApi()){openSettings();return;}
+    $("#adminLoginForm").reset();$("#adminLoginDialog").showModal();
+  });
+  $("#adminLoginForm").addEventListener("submit",async e=>{
+    e.preventDefault();const password=String(new FormData(e.currentTarget).get("adminPassword")||"");
+    try{await adminLogin(password);$("#adminLoginDialog").close();showNotice("เข้าสู่ระบบ Admin สำเร็จ สามารถแก้ไขข้อมูล Tool ได้","success");}
+    catch(err){showNotice("เข้าสู่ระบบ Admin ไม่สำเร็จ: "+err.message,"error");}
+    e.currentTarget.reset();
+  });
+  $("#editToolForm").addEventListener("submit",submitEdit);
+  $("#actionForm").addEventListener("submit",submitAction);
   $("#refreshBtn").addEventListener("click",refreshAll);$("#refreshHistoryBtn").addEventListener("click",refreshAll);
   ["searchInput","lineFilter","statusFilter","sortSelect"].forEach(id=>$("#"+id).addEventListener("input",renderTools));
   $("#settingsForm").addEventListener("submit", e => {
