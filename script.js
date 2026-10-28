@@ -331,7 +331,7 @@ async function submitAction(e){
     const backup=state.tools.find(t=>t.serial===data.backupSerial);
     if(!damaged||!backup){showNotice("ไม่พบ Tool ที่เลือก กรุณากด Refresh","error");return;}
     if(normalizeLineName(backup.line)!=="back up tool"){showNotice("เลือกได้เฉพาะ Tool ในหมวด Back up tool","error");return;}
-    if(!confirm(`ยืนยันย้าย ${damaged.serial} ไป Damage และนำ ${backup.serial} มาแทนที่ Line ${damaged.line} ?`))return;
+    if(!confirm(`ยืนยันสลับข้อมูล Tool ${damaged.serial} กับ ${backup.serial} โดยให้แถวของ ${backup.serial} เปลี่ยน Line เป็น Damage และแถว Line ${damaged.line} คง Line/Process เดิม ?`))return;
     data.action="damageReplace";data.damagedSerial=data.serial;delete data.serial;delete data.actionType;
     await runMutation("กำลังบันทึก Damage และเปลี่ยน Tool...",async()=>{await apiWrite(data);$("#actionDialog").close();showNotice("บันทึก Damage และเปลี่ยน Tool แล้ว","success");});
     return;
@@ -342,7 +342,7 @@ async function submitAction(e){
   if(!first||!second){showNotice("ไม่พบ Tool ที่เลือก กรุณากด Refresh","error");return;}
   if(normalizeLineName(first.line)===normalizeLineName(second.line)){showNotice("Tool ทั้งสองอยู่ใน Line เดียวกัน ไม่จำเป็นต้องสลับ","error");return;}
   data.action="swapTools";data.serialA=data.serial;data.serialB=data.swapSerial;delete data.serial;delete data.swapSerial;delete data.actionType;
-  if(!confirm(`ยืนยัน Move โดยสลับตำแหน่ง ${data.serialA} กับ ${data.serialB} ?`))return;
+  if(!confirm(`ยืนยัน Move โดยสลับเฉพาะข้อมูล Tool ${data.serialA} กับ ${data.serialB} และคง Line/Process เดิม ?`))return;
   await runMutation("กำลังสลับตำแหน่ง Tool...",async()=>{await apiWrite(data);$("#actionDialog").close();showNotice("บันทึกการสลับตำแหน่งแล้ว","success");});
 }
 async function runMutation(msg,fn){
