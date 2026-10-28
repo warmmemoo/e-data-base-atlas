@@ -5,3 +5,10 @@
 @media(max-width:760px){.sidebar{display:none;position:fixed;z-index:10;left:0;top:0;bottom:0;box-shadow:10px 0 30px #0001}.sidebar.open{display:flex}.main{padding:18px 12px}.topbar{gap:10px;flex-wrap:wrap}.mobile-menu{display:block}.topbar>div:nth-child(2){flex:1}.top-actions{width:100%;justify-content:flex-end}.topbar h1{font-size:23px}.stats-grid{gap:9px}.stat-card{padding:12px;gap:9px;min-height:90px}.stat-icon{width:34px;height:34px;font-size:17px}.stat-card strong{font-size:22px}.stat-card span{font-size:10px}.stat-card small{font-size:9px}.panel-header{padding:17px 14px}.filters{padding:0 14px 14px}.search-box{min-width:100%}.filters select{flex:1}.form-grid{grid-template-columns:1fr}.modal .full{grid-column:auto}.modal form{padding:19px}.table-footer{padding:12px 14px;gap:10px}.table-footer span:last-child{display:none}}
 
 .muted-inline{font-size:10px;color:#9aa3b3;white-space:nowrap}
+
+/* Backup categories are nested under OTHER. */
+.backup-nav{padding-left:8px;margin-bottom:4px}
+.backup-nav .nav-item{font-size:12px;padding-left:13px}
+.cal-badge.damage{background:#ffeded;color:#b91c1c}
+.mini-btn.danger-action{border-color:#f4b4b4;color:#b91c1c}
+.mini-btn.danger-action:hover{background:#fff1f1;border-color:#dc2626;color:#991b1b}
