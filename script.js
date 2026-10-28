@@ -246,14 +246,16 @@ function renderTools(){
     const st=calStatus(t);
     const isDamage=normalizeLineName(t.line)==="damage";
     const statusBadge=isDamage?'<span class="cal-badge damage">Damage</span>':`<span class="cal-badge ${st.key}">${esc(st.label)}</span>`;
-    const editButton=state.isAdmin?`<button class="mini-btn" data-action="edit" data-serial="${esc(t.serial)}">Edit</button>`:"";
-    const damageButton=isDamage?"":`<button class="mini-btn danger-action" data-action="damage" data-serial="${esc(t.serial)}">Damage</button>`;
+    const editButton=state.isAdmin && t.serial?`<button class="mini-btn" data-action="edit" data-serial="${esc(t.serial)}">Edit</button>`:"";
+    const damageButton=isDamage || !t.serial?"":`<button class="mini-btn danger-action" data-action="damage" data-serial="${esc(t.serial)}">Damage</button>`;
+    const moveButton=t.serial?`<button class="mini-btn" data-action="move" data-serial="${esc(t.serial)}">Move</button>`:"";
+    const deleteButton=state.isAdmin?`<button class="mini-btn danger-action" data-action="delete" data-row="${esc(t._row)}" data-serial="${esc(t.serial)}" data-model="${esc(t.toolModel)}" data-line="${esc(t.line)}">Delete</button>`:"";
     return `<tr>
       <td><div class="tool-name">${esc(t.toolModel||"ไม่ระบุ Model")}</div><div class="tool-serial">${esc(t.serial||"ไม่มี Serial")}</div></td>
       <td><span class="line-pill" title="${esc(t.line)}">${esc(t.line)}</span></td>
       <td>${esc(t.process||"—")}</td><td>${esc(t.controller||"—")}</td><td>${esc(t.ipAddress||"—")}</td>
       <td>${esc(fmtDate(t.currentCalibration))}</td><td>${esc(fmtDate(t.nextCalibration))}</td><td>${statusBadge}</td>
-      <td><div class="row-actions">${editButton}${damageButton}<button class="mini-btn" data-action="move" data-serial="${esc(t.serial)}">Move</button></div></td>
+      <td><div class="row-actions">${editButton}${damageButton}${moveButton}${deleteButton}${(!editButton&&!damageButton&&!moveButton&&!deleteButton)?'<span class="muted">—</span>':""}</div></td>
     </tr>`;
   }).join("");
 }
@@ -273,7 +275,7 @@ function renderHistory(){
   $("#historyBody").innerHTML=rows.map(h=>`<tr><td>${esc(h.timestamp||"—")}</td><td>${esc(h.action||"—")}</td><td>${esc(h.serial||"—")}</td><td>${esc(h.fromLine||"—")}</td><td>${esc(h.toLine||"—")}</td><td>${esc(h.details||"—")}</td><td>${esc(h.actor||"—")}</td></tr>`).join("");
 }
 function renderAll(){renderStats();renderTools();renderHistory();$("#lastUpdated").textContent="อัปเดตล่าสุด "+new Date().toLocaleTimeString("th-TH",{hour:"2-digit",minute:"2-digit",second:"2-digit"});}
-async function refreshAll(){
+async function refreshAll(options={}){
   hideNotice();
   if(!hasApi()){showNotice("กรุณาตั้งค่า Apps Script Web App URL และ API key ก่อนใช้งาน โดยกดปุ่มตั้งค่าที่แถบเมนู (คลิกชื่อ ATLAS-Data Base หรือกด Alt+S)","");$("#connectionLabel").textContent="ยังไม่ได้ตั้งค่า API";$("#toolTableBody").innerHTML='<tr><td colspan="9" class="empty">ยังไม่ได้เชื่อมต่อ Google Sheets API</td></tr>';return;}
   try{
@@ -284,6 +286,15 @@ async function refreshAll(){
     renderAll();showNotice("โหลดข้อมูลจาก Google Sheets สำเร็จ","success");
     setTimeout(()=>{if($("#notice").textContent==="โหลดข้อมูลจาก Google Sheets สำเร็จ")hideNotice();},3500);
   }catch(e){$("#connectionLabel").textContent="เชื่อมต่อไม่สำเร็จ";$(".status-dot")?.classList.remove("online");showNotice("เชื่อมต่อไม่สำเร็จ: "+e.message+" — ตรวจสอบ URL, API key และการ Deploy Apps Script","error");}
+
+  if(options.preserveView && options.savedView){
+    const saved = options.savedView;
+    if($("#searchInput"))$("#searchInput").value=saved.search;
+    if($("#lineFilter"))$("#lineFilter").value=saved.lineFilter;
+    if($("#statusFilter"))$("#statusFilter").value=saved.statusFilter;
+    if($("#sortSelect"))$("#sortSelect").value=saved.sort;
+    setView(saved.view || "dashboard", saved.selectedLine || "");
+  }
 }
 function openToolDialog(){$("#toolForm").reset();$("#toolDialog").showModal();}
 function openActionDialog(type,serial){
@@ -345,52 +356,41 @@ async function submitAction(e){
   if(!confirm(`ยืนยัน Move โดยสลับเฉพาะข้อมูล Tool ${data.serialA} กับ ${data.serialB} และคง Line/Process เดิม ?`))return;
   await runMutation("กำลังสลับตำแหน่ง Tool...",async()=>{await apiWrite(data);$("#actionDialog").close();showNotice("บันทึกการสลับตำแหน่งแล้ว","success");});
 }
-async function runMutation(msg,fn){
-  state.busy=true;showNotice(msg);
-  try{await fn();}catch(e){showNotice("ไม่สามารถยืนยันผลการบันทึกได้: "+e.message+" กรุณากด Refresh และตรวจสอบ Movement History ก่อนส่งคำสั่งซ้ำ","error");}
-  finally{state.busy=false;}
+function captureTableViewState(){
+  return {
+    view: state.view,
+    selectedLine: state.selectedLine,
+    search: $("#searchInput")?.value || "",
+    lineFilter: $("#lineFilter")?.value || "",
+    statusFilter: $("#statusFilter")?.value || "",
+    sort: $("#sortSelect")?.value || ""
+  };
 }
-function openSettings(){
-  const f=$("#settingsForm");f.elements.apiUrl.value=state.apiUrl;f.elements.apiKey.value=state.apiKey;$("#settingsDialog").showModal();
+function restoreTableViewState(saved){
+  if(!saved)return;
+  if($("#searchInput"))$("#searchInput").value=saved.search;
+  if($("#lineFilter"))$("#lineFilter").value=saved.lineFilter;
+  if($("#statusFilter"))$("#statusFilter").value=saved.statusFilter;
+  if($("#sortSelect"))$("#sortSelect").value=saved.sort;
+  setView(saved.view || "dashboard", saved.selectedLine || "");
+  renderAll();
 }
-function init(){
-  populateLines();
-  document.addEventListener("click",e=>{
-    const close=e.target.closest("[data-close]");if(close){$("#"+close.dataset.close).close();return;}
-    const nav=e.target.closest("[data-view]");if(nav){setView(nav.dataset.view);return;}
-    const line=e.target.closest("[data-line]");if(line){setView("line",line.dataset.line);return;}
-    const action=e.target.closest("[data-action]");if(action){if(action.dataset.action==="edit")openEditDialog(action.dataset.serial);else openActionDialog(action.dataset.action,action.dataset.serial);return;}
-  });
-  $("#adminBtn").addEventListener("click",()=>{
-    if(state.isAdmin){if(confirm("ต้องการออกจากระบบ Admin หรือไม่?"))adminLogout();return;}
-    if(!hasApi()){openSettings();return;}
-    $("#adminLoginForm").reset();$("#adminLoginDialog").showModal();
-  });
-  $("#adminLoginForm").addEventListener("submit",async e=>{
-    e.preventDefault();const password=String(new FormData(e.currentTarget).get("adminPassword")||"");
-    try{await adminLogin(password);$("#adminLoginDialog").close();showNotice("เข้าสู่ระบบ Admin สำเร็จ สามารถแก้ไขข้อมูล Tool ได้","success");}
-    catch(err){showNotice("เข้าสู่ระบบ Admin ไม่สำเร็จ: "+err.message,"error");}
-    e.currentTarget.reset();
-  });
-  $("#editToolForm").addEventListener("submit",submitEdit);
-  $("#actionForm").addEventListener("submit",submitAction);
-  $("#refreshBtn").addEventListener("click",refreshAll);$("#refreshHistoryBtn").addEventListener("click",refreshAll);
-  ["searchInput","lineFilter","statusFilter","sortSelect"].forEach(id=>$("#"+id).addEventListener("input",renderTools));
-  $("#settingsForm").addEventListener("submit", e => {
-    e.preventDefault();
-    const fd = new FormData(e.currentTarget);
-    state.apiUrl = String(fd.get("apiUrl")).trim();
-    state.apiKey = String(fd.get("apiKey")).trim();
-    saveApiSettings();
-    $("#settingsDialog").close();
-    refreshAll();
-  });
-  $("#mobileMenu").addEventListener("click",()=>$("#sidebar").classList.toggle("open"));
-  // Settings can be opened with Alt+S. API settings are saved in this browser's localStorage.
-  document.addEventListener("keydown",e=>{if(e.altKey&&e.key.toLowerCase()==="s"){e.preventDefault();openSettings();}});
-  // Restore saved API settings and load Google Sheets automatically on page refresh.
-  loadApiSettings();
-  setView("dashboard");
-  refreshAll();
+async function runMutation(message,fn){
+  const savedView = captureTableViewState();
+  state.busy=true;
+  try{
+    showNotice(message,"info");
+    await fn();
+    await refreshAll({preserveView:true, savedView:savedView});
+  }catch(e){
+    showNotice(e.message||String(e),"error");
+  }finally{
+    state.busy=false;
+    renderAll();
+    restoreTableViewState(savedView);
+  }
 }
-init();
+async function deleteToolRecord(button){
+  if(!state.isAdmin){showNotice("กรุณาเข้าสู่ระบบ Admin ก่อนลบข้อมูล","error");return;}
+  if(state.busy)return;
+  const sheetRow=Number(button.dataset.row);
