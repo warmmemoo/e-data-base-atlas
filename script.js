@@ -200,7 +200,7 @@ function populateLines(){
 
   $("#backupNav").innerHTML = BACKUP_LINES.map(x =>
     `<button class="nav-item line-item" data-line="${esc(x)}"><span>◦</span>${esc(x)}</button>`
-  ).join("") + `<button class="nav-item line-item damage-nav-item" data-line="Damage"><span>◦</span>Damage</button>`;
+  ).join("");
 
   $("#lineFilter").innerHTML = '<option value="">ทุก Line</option>' + LINES.map(x =>
     `<option value="${esc(x)}">${esc(x)}</option>`
@@ -230,7 +230,7 @@ function setView(view,line=""){
 }
 function currentTools(){
   let arr=[...state.tools];
-  const search=$("#searchInput").value.trim().toLowerCase(),line=$("#lineFilter").value,status=$("#statusFilter").value,sort=$("#sortSelect").value;
+  const search=$("#searchInput").value.trim().toLowerCase(),status=$("#statusFilter").value,sort=$("#sortSelect").value;
   if(state.view==="backup") {
     arr=arr.filter(t=>BACKUP_LINES.includes(String(t.line||"").trim()));
   } else if(state.view==="line" && state.selectedLine) {
@@ -239,7 +239,6 @@ function currentTools(){
     // Accessories, and Damage.
     arr=arr.filter(t=>normalizeLineName(t.line)===normalizeLineName(state.selectedLine));
   }
-  if(line)arr=arr.filter(t=>normalizeLineName(t.line)===normalizeLineName(line));
   if(search)arr=arr.filter(t=>[t.toolModel,t.serial,t.process,t.ipAddress,t.controller,t.line].some(v=>String(v||"").toLowerCase().includes(search)));
   if(status)arr=arr.filter(t=>calStatus(t).key===status);
   const lineOrder = new Map(LINES.map((name,index)=>[normalizeLineName(name),index]));
@@ -294,9 +293,7 @@ function renderStats(){
   $("#dueSoon").textContent=dueSoon;
   $("#overdue").textContent=overdue;
   $("#backupCount").textContent=state.tools.filter(t=>normalizeLineName(t.line)==="back up tool").length;
-  const old=$("#lineFilter").value;
-  $("#lineFilter").innerHTML='<option value="">ทุก Line</option>'+LINES.map(x=>`<option value="${esc(x)}">${esc(x)}</option>`).join("");
-  $("#lineFilter").value=old;
+
 }
 function renderHistory(){
   const rows=[...state.history].reverse();
@@ -319,7 +316,6 @@ async function refreshAll(options={}){
   if(options.preserveView && options.savedView){
     const saved = options.savedView;
     if($("#searchInput"))$("#searchInput").value=saved.search;
-    if($("#lineFilter"))$("#lineFilter").value=saved.lineFilter;
     if($("#statusFilter"))$("#statusFilter").value=saved.statusFilter;
     if($("#sortSelect"))$("#sortSelect").value=saved.sort;
     setView(saved.view || "dashboard", saved.selectedLine || "");
@@ -333,12 +329,18 @@ function openActionDialog(type,serial){
   $("#actionTitle").textContent=isDamage?"Damage Tool & Replace":"Move Tool (Swap with another Tool)";
   $("#actionDescription").textContent=isDamage
     ? `เลือก Back up tool เพื่อแทนที่ ${t.toolModel} (${t.serial}) ที่อยู่ Line ${t.line}`
-    : `เลือก Tool อื่นเพื่อสลับตำแหน่งกับ ${t.toolModel} (${t.serial}) ซึ่งอยู่ที่ ${t.line}`;
+    : `เลือก Tool จาก Production Line หรือ Back up tool เพื่อสลับข้อมูล โดยคง Line และ Process ของแต่ละแถวไว้`;
   $("#destinationLabel").classList.add("hidden");
   $("#swapLabel").classList.toggle("hidden",isDamage);
   $("#backupReplaceLabel").classList.toggle("hidden",!isDamage);
   $("#confirmActionBtn").textContent=isDamage?"ยืนยัน Damage และเปลี่ยน Tool":"ยืนยันสลับตำแหน่ง";
-  const candidates=state.tools.filter(x=>x.serial!==serial && normalizeLineName(x.line)!==normalizeLineName(t.line) && normalizeLineName(x.line)!=="damage");
+  const productionLines = LINES.filter(x => !BACKUP_LINES.includes(x) && normalizeLineName(x)!=="damage");
+  const allowedMoveLines = [...productionLines, "Back up tool"].map(normalizeLineName);
+  const candidates=state.tools.filter(x=>
+    x.serial!==serial &&
+    normalizeLineName(x.line)!==normalizeLineName(t.line) &&
+    allowedMoveLines.includes(normalizeLineName(x.line))
+  );
   $("#swapSerialSelect").innerHTML=candidates.map(x=>`<option value="${esc(x.serial)}">${esc(x.serial)} — ${esc(x.toolModel)} (${esc(x.line)})</option>`).join("");
   const backups=state.tools.filter(x=>normalizeLineName(x.line)==="back up tool" && x.serial!==serial);
   $("#backupSerialSelect").innerHTML=backups.map(x=>`<option value="${esc(x.serial)}">${esc(x.serial)} — ${esc(x.toolModel)}</option>`).join("");
@@ -382,7 +384,11 @@ async function submitAction(e){
   if(!first||!second){showNotice("ไม่พบ Tool ที่เลือก กรุณากด Refresh","error");return;}
   if(normalizeLineName(first.line)===normalizeLineName(second.line)){showNotice("Tool ทั้งสองอยู่ใน Line เดียวกัน ไม่จำเป็นต้องสลับ","error");return;}
   data.action="swapTools";data.serialA=data.serial;data.serialB=data.swapSerial;delete data.serial;delete data.swapSerial;delete data.actionType;
-  if(!confirm(`ยืนยัน Move โดยสลับเฉพาะข้อมูล Tool ${data.serialA} กับ ${data.serialB} และคง Line/Process เดิม ?`))return;
+  const moveToBackup = normalizeLineName(second.line)==="back up tool";
+  const confirmText = moveToBackup
+    ? `ยืนยันนำ Tool ${first.serial} ไปอยู่ในหมวด Back up tool โดยสลับเฉพาะ Model, Serial, Detail, Total tightenings และ Calibration กับ ${second.serial} โดยคง Line/Process ของแต่ละแถว และไม่เปลี่ยน IP address?`
+    : `ยืนยันสลับข้อมูล Tool ${first.serial} (${first.line}) กับ ${second.serial} (${second.line}) โดยคง Line/Process เดิม และไม่เปลี่ยน IP address?`;
+  if(!confirm(confirmText))return;
   await runMutation("กำลังสลับตำแหน่ง Tool...",async()=>{await apiWrite(data);$("#actionDialog").close();showNotice("บันทึกการสลับตำแหน่งแล้ว","success");});
 }
 function captureTableViewState(){
@@ -390,7 +396,6 @@ function captureTableViewState(){
     view: state.view,
     selectedLine: state.selectedLine,
     search: $("#searchInput")?.value || "",
-    lineFilter: $("#lineFilter")?.value || "",
     statusFilter: $("#statusFilter")?.value || "",
     sort: $("#sortSelect")?.value || ""
   };
@@ -398,7 +403,6 @@ function captureTableViewState(){
 function restoreTableViewState(saved){
   if(!saved)return;
   if($("#searchInput"))$("#searchInput").value=saved.search;
-  if($("#lineFilter"))$("#lineFilter").value=saved.lineFilter;
   if($("#statusFilter"))$("#statusFilter").value=saved.statusFilter;
   if($("#sortSelect"))$("#sortSelect").value=saved.sort;
   setView(saved.view || "dashboard", saved.selectedLine || "");
@@ -510,7 +514,7 @@ function init(){
   $("#editToolForm").addEventListener("submit",submitEdit);
   $("#actionForm").addEventListener("submit",submitAction);
   $("#refreshBtn").addEventListener("click",refreshAll);$("#refreshHistoryBtn").addEventListener("click",refreshAll);
-  ["searchInput","lineFilter","statusFilter","sortSelect"].forEach(id=>$("#"+id).addEventListener("input",renderTools));
+  ["searchInput","statusFilter","sortSelect"].forEach(id=>$("#"+id).addEventListener("input",renderTools));
   $("#settingsForm").addEventListener("submit", e => {
     e.preventDefault();
     const fd = new FormData(e.currentTarget);
