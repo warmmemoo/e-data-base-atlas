@@ -259,12 +259,29 @@ function renderTools(){
     </tr>`;
   }).join("");
 }
+function isDashboardCountableTool(tool){
+  const line=normalizeLineName(tool.line);
+  const productionLines=LINES.slice(0,6).map(normalizeLineName);
+  return productionLines.includes(line) || line==="back up tool";
+}
+function hasCalibrationDates(tool){
+  return Boolean(dateValue(tool.currentCalibration) && dateValue(tool.nextCalibration));
+}
 function renderStats(){
-  const statuses=state.tools.map(calStatus);$("#totalTools").textContent=state.tools.length;
-  $("#calOk").textContent=statuses.filter(s=>s.key==="ok").length;
-  $("#dueSoon").textContent=statuses.filter(s=>s.key==="soon").length;
-  $("#overdue").textContent=statuses.filter(s=>s.key==="overdue").length;
-  $("#backupCount").textContent=state.tools.filter(t=>BACKUP_LINES.includes(String(t.line||"").trim())).length;
+  // Dashboard KPI counts only production-line tools and Back up tool.
+  // Exclude Back up controller, Accessories, and Damage.
+  const countable=state.tools.filter(isDashboardCountableTool);
+  const total=countable.length;
+  const withNext=countable.filter(t=>Boolean(dateValue(t.nextCalibration)));
+  const calibrated=withNext.filter(t=>hasCalibrationDates(t));
+  const ok=calibrated.filter(t=>calStatus(t).key==="ok").length;
+  const dueSoon=withNext.filter(t=>calStatus(t).key==="soon").length;
+  const overdue=withNext.filter(t=>calStatus(t).key==="overdue").length;
+  $("#totalTools").textContent=total;
+  $("#calOk").textContent=ok;
+  $("#dueSoon").textContent=dueSoon;
+  $("#overdue").textContent=overdue;
+  $("#backupCount").textContent=state.tools.filter(t=>normalizeLineName(t.line)==="back up tool").length;
   const old=$("#lineFilter").value;
   $("#lineFilter").innerHTML='<option value="">ทุก Line</option>'+LINES.map(x=>`<option value="${esc(x)}">${esc(x)}</option>`).join("");
   $("#lineFilter").value=old;
@@ -400,6 +417,12 @@ async function deleteToolRecord(button){
   const identity=serial ? `${model} (Serial: ${serial})` : model;
   const confirmed=confirm(`ยืนยันลบ ${identity || "รายการนี้"} จาก Line/หมวด "${line}" หรือไม่?\n\nระบบจะลบแถวนี้ออกจาก Google Sheets จริง และไม่สามารถกู้คืนจากหน้าเว็บได้`);
   if(!confirmed)return;
+  const sameRecordCount = (items) => items.filter(t =>
+    String(t.serial||"").trim()===serial &&
+    String(t.toolModel||"").trim()===model &&
+    normalizeLineName(t.line)===normalizeLineName(line)
+  ).length;
+  const beforeCount = sameRecordCount(state.tools);
   await runMutation("กำลังลบข้อมูลจาก Google Sheets...",async()=>{
     await apiWrite({
       action:"deleteTool",
@@ -409,6 +432,10 @@ async function deleteToolRecord(button){
       expectedModel:model,
       expectedLine:line
     });
+    const afterCount = sameRecordCount(state.tools);
+    if(afterCount >= beforeCount){
+      throw new Error("Google Sheets ยังมีรายการนี้อยู่ การลบอาจไม่สำเร็จ กรุณาตรวจสอบ Admin session / Apps Script deployment แล้วลองใหม่");
+    }
     showNotice(`ลบ ${identity || "รายการ"} ออกจาก Google Sheets แล้ว`,"success");
   });
 }
