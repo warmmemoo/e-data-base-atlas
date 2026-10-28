@@ -7,10 +7,12 @@ const LINES = [
   "TOYOTA 500D P8",
   "TOYOTA 500D COVERING",
   "ISUZU RT50",
-  "Back up",
+  "Back up tool",
+  "Back up controller",
+  "Accessories",
   "Damage"
 ];
-const BACKUP = "Back up";
+const BACKUP_LINES = ["Back up tool", "Back up controller", "Accessories"];
 const $ = (s) => document.querySelector(s);
 const state = { tools: [], history: [], view: "dashboard", selectedLine: "", apiUrl: "", apiKey: "", busy: false, adminSessionId: "", isAdmin: false };
 
@@ -191,19 +193,27 @@ async function submitEdit(e){
 }
 
 function populateLines(){
-  // Production lines stay under LINE; Back up and Damage belong under OTHER.
-  $("#lineNav").innerHTML=LINES.filter(x=>x!==BACKUP && x!=="Damage").map(x=>`<button class="nav-item line-item" data-line="${esc(x)}"><span>◦</span>${esc(x)}</button>`).join("");
+  const productionLines = LINES.filter(x => !BACKUP_LINES.includes(x) && x !== "Damage");
+  $("#lineNav").innerHTML = productionLines.map(x =>
+    `<button class="nav-item line-item" data-line="${esc(x)}"><span>◦</span>${esc(x)}</button>`
+  ).join("");
 
-  // Place Damage directly below Back up in the OTHER section of the sidebar.
-  const backupNav = document.querySelector('[data-view="backup"]');
-  if (backupNav && !document.querySelector('[data-line="Damage"]')) {
-    backupNav.insertAdjacentHTML("afterend", `<button class="nav-item line-item" data-line="Damage"><span>◦</span>Damage</button>`);
-  }
+  $("#backupNav").innerHTML = BACKUP_LINES.map(x =>
+    `<button class="nav-item line-item" data-line="${esc(x)}"><span>◦</span>${esc(x)}</button>`
+  ).join("") + `<button class="nav-item line-item damage-nav-item" data-line="Damage"><span>◦</span>Damage</button>`;
 
-  $("#lineFilter").innerHTML='<option value="">ทุก Line</option>'+LINES.map(x=>`<option value="${esc(x)}">${esc(x)}</option>`).join("");
-  $("#addLineSelect").innerHTML=LINES.map(x=>`<option value="${esc(x)}">${esc(x)}</option>`).join("");
-  $("#editLineSelect").innerHTML=LINES.map(x=>`<option value="${esc(x)}">${esc(x)}</option>`).join("");
-  $("#destinationSelect").innerHTML=LINES.map(x=>`<option value="${esc(x)}">${esc(x)}</option>`).join("");
+  $("#lineFilter").innerHTML = '<option value="">ทุก Line</option>' + LINES.map(x =>
+    `<option value="${esc(x)}">${esc(x)}</option>`
+  ).join("");
+  $("#addLineSelect").innerHTML = LINES.map(x =>
+    `<option value="${esc(x)}">${esc(x)}</option>`
+  ).join("");
+  $("#editLineSelect").innerHTML = LINES.map(x =>
+    `<option value="${esc(x)}">${esc(x)}</option>`
+  ).join("");
+  $("#destinationSelect").innerHTML = LINES.map(x =>
+    `<option value="${esc(x)}">${esc(x)}</option>`
+  ).join("");
 }
 function setView(view,line=""){
   state.view=view;state.selectedLine=line;
@@ -212,20 +222,18 @@ function setView(view,line=""){
   if(view==="backup")document.querySelector('[data-view="backup"]')?.classList.add("active");
   if(view==="history")document.querySelector('[data-view="history"]')?.classList.add("active");
   if(line)document.querySelector(`[data-line="${CSS.escape(line)}"]`)?.classList.add("active");
-  $("#dashboardView").classList.toggle("hidden",view==="history");$("#historyView").classList.toggle("hidden",view!=="history");
+  $("#dashboardView").classList.toggle("hidden",view==="history");
+  $("#historyView").classList.toggle("hidden",view!=="history");
   $("#pageTitle").textContent=view==="dashboard"?"Dashboard":view==="backup"?"Back up":view==="history"?"Movement History":line;
-  $("#tableHeading").textContent=view==="backup"?"Back up Tools":line?line+" — Tools":"Tool List";
+  $("#tableHeading").textContent=view==="backup"?"Back up Inventory":line?line+" — Tools":"Tool List";
   $("#sidebar").classList.remove("open");renderTools();
 }
 function currentTools(){
-  let arr=[...state.tools];const search=$("#searchInput").value.trim().toLowerCase(),line=$("#lineFilter").value,status=$("#statusFilter").value,sort=$("#sortSelect").value;
-  if(state.view==="backup")arr=arr.filter(t=>t.line.toLowerCase()===BACKUP.toLowerCase());
-  else if(state.selectedLine) {
-    arr = arr.filter(t => normalizeLineName(t.line) === normalizeLineName(state.selectedLine));
-  }
-  if(line) {
-    arr = arr.filter(t => normalizeLineName(t.line) === normalizeLineName(line));
-  }
+  let arr=[...state.tools];
+  const search=$("#searchInput").value.trim().toLowerCase(),line=$("#lineFilter").value,status=$("#statusFilter").value,sort=$("#sortSelect").value;
+  if(state.view==="backup")arr=arr.filter(t=>BACKUP_LINES.includes(String(t.line||"").trim()));
+  else if(state.selectedLine)arr=arr.filter(t=>normalizeLineName(t.line)===normalizeLineName(state.selectedLine));
+  if(line)arr=arr.filter(t=>normalizeLineName(t.line)===normalizeLineName(line));
   if(search)arr=arr.filter(t=>[t.toolModel,t.serial,t.process,t.ipAddress,t.controller,t.line].some(v=>String(v||"").toLowerCase().includes(search)));
   if(status)arr=arr.filter(t=>calStatus(t).key===status);
   arr.sort((a,b)=>sort==="serial"?a.serial.localeCompare(b.serial):sort==="calibration"?((dateValue(a.nextCalibration)||new Date(8640000000000000))-(dateValue(b.nextCalibration)||new Date(8640000000000000))):a.line.localeCompare(b.line)||a.serial.localeCompare(b.serial));
@@ -236,12 +244,16 @@ function renderTools(){
   if(!arr.length){$("#toolTableBody").innerHTML=`<tr><td colspan="9" class="empty">${state.tools.length?"ไม่พบ Tool ตามเงื่อนไข":"ยังไม่มีข้อมูล Tool หรือยังไม่ได้เชื่อมต่อ API"}</td></tr>`;return;}
   $("#toolTableBody").innerHTML=arr.map(t=>{
     const st=calStatus(t);
+    const isDamage=normalizeLineName(t.line)==="damage";
+    const statusBadge=isDamage?'<span class="cal-badge damage">Damage</span>':`<span class="cal-badge ${st.key}">${esc(st.label)}</span>`;
+    const editButton=state.isAdmin?`<button class="mini-btn" data-action="edit" data-serial="${esc(t.serial)}">Edit</button>`:"";
+    const damageButton=isDamage?"":`<button class="mini-btn danger-action" data-action="damage" data-serial="${esc(t.serial)}">Damage</button>`;
     return `<tr>
       <td><div class="tool-name">${esc(t.toolModel||"ไม่ระบุ Model")}</div><div class="tool-serial">${esc(t.serial||"ไม่มี Serial")}</div></td>
       <td><span class="line-pill" title="${esc(t.line)}">${esc(t.line)}</span></td>
       <td>${esc(t.process||"—")}</td><td>${esc(t.controller||"—")}</td><td>${esc(t.ipAddress||"—")}</td>
-      <td>${esc(fmtDate(t.currentCalibration))}</td><td>${esc(fmtDate(t.nextCalibration))}</td><td><span class="cal-badge ${st.key}">${esc(st.label)}</span></td>
-      <td><div class="row-actions">${state.isAdmin?`<button class="mini-btn" data-action="edit" data-serial="${esc(t.serial)}">Edit</button><button class="mini-btn" data-action="move" data-serial="${esc(t.serial)}">Move</button><button class="mini-btn" data-action="swap" data-serial="${esc(t.serial)}">Swap</button>`:"<span class=\"muted-inline\">Admin only</span>"}</div></td>
+      <td>${esc(fmtDate(t.currentCalibration))}</td><td>${esc(fmtDate(t.nextCalibration))}</td><td>${statusBadge}</td>
+      <td><div class="row-actions">${editButton}${damageButton}<button class="mini-btn" data-action="move" data-serial="${esc(t.serial)}">Move</button></div></td>
     </tr>`;
   }).join("");
 }
@@ -250,7 +262,7 @@ function renderStats(){
   $("#calOk").textContent=statuses.filter(s=>s.key==="ok").length;
   $("#dueSoon").textContent=statuses.filter(s=>s.key==="soon").length;
   $("#overdue").textContent=statuses.filter(s=>s.key==="overdue").length;
-  $("#backupCount").textContent=state.tools.filter(t=>t.line.toLowerCase()===BACKUP.toLowerCase()).length;
+  $("#backupCount").textContent=state.tools.filter(t=>BACKUP_LINES.includes(String(t.line||"").trim())).length;
   const old=$("#lineFilter").value;
   $("#lineFilter").innerHTML='<option value="">ทุก Line</option>'+LINES.map(x=>`<option value="${esc(x)}">${esc(x)}</option>`).join("");
   $("#lineFilter").value=old;
@@ -277,12 +289,29 @@ function openToolDialog(){$("#toolForm").reset();$("#toolDialog").showModal();}
 function openActionDialog(type,serial){
   const t=state.tools.find(x=>x.serial===serial);if(!t)return;
   const f=$("#actionForm");f.reset();f.elements.actionType.value=type;f.elements.serial.value=serial;
-  $("#actionTitle").textContent=type==="move"?"Move Tool":"Swap Tool";
-  $("#actionDescription").textContent=`Tool ${t.toolModel} (${t.serial}) อยู่ที่ ${t.line}`;
-  $("#destinationLabel").classList.toggle("hidden",type!=="move");$("#swapLabel").classList.toggle("hidden",type!=="swap");
-  $("#confirmActionBtn").textContent=type==="move"?"ยืนยันการย้าย":"ยืนยันการสลับ";
-  $("#destinationSelect").value=t.line;
-  $("#swapSerialSelect").innerHTML=state.tools.filter(x=>x.serial!==serial).map(x=>`<option value="${esc(x.serial)}">${esc(x.serial)} — ${esc(x.toolModel)} (${esc(x.line)})</option>`).join("");
+  const isDamage=type==="damage";
+  $("#actionTitle").textContent=isDamage?"Damage Tool & Replace":"Move Tool (Swap with another Tool)";
+  $("#actionDescription").textContent=isDamage
+    ? `เลือก Back up tool เพื่อแทนที่ ${t.toolModel} (${t.serial}) ที่อยู่ Line ${t.line}`
+    : `เลือก Tool อื่นเพื่อสลับตำแหน่งกับ ${t.toolModel} (${t.serial}) ซึ่งอยู่ที่ ${t.line}`;
+  $("#destinationLabel").classList.add("hidden");
+  $("#swapLabel").classList.toggle("hidden",isDamage);
+  $("#backupReplaceLabel").classList.toggle("hidden",!isDamage);
+  $("#confirmActionBtn").textContent=isDamage?"ยืนยัน Damage และเปลี่ยน Tool":"ยืนยันสลับตำแหน่ง";
+  const candidates=state.tools.filter(x=>x.serial!==serial && normalizeLineName(x.line)!==normalizeLineName(t.line) && normalizeLineName(x.line)!=="damage");
+  $("#swapSerialSelect").innerHTML=candidates.map(x=>`<option value="${esc(x.serial)}">${esc(x.serial)} — ${esc(x.toolModel)} (${esc(x.line)})</option>`).join("");
+  const backups=state.tools.filter(x=>normalizeLineName(x.line)==="back up tool" && x.serial!==serial);
+  $("#backupSerialSelect").innerHTML=backups.map(x=>`<option value="${esc(x.serial)}">${esc(x.serial)} — ${esc(x.toolModel)}</option>`).join("");
+  const selected=state.tools.find(x=>x.serial===serial);
+  if(isDamage && normalizeLineName(selected.line)==="damage") {
+    showNotice("Tool นี้อยู่ใน Damage อยู่แล้ว","error");return;
+  }
+  if(isDamage && backups.length===0) {
+    showNotice("ไม่มี Tool ในหมวด Back up tool สำหรับเปลี่ยนแทน","error");return;
+  }
+  if(!isDamage && candidates.length===0) {
+    showNotice("ไม่มี Tool อื่นใน Line ที่แตกต่างกันให้สลับ","error");return;
+  }
   $("#actionDialog").showModal();
 }
 async function submitAdd(e){
@@ -293,18 +322,28 @@ async function submitAdd(e){
   await runMutation("กำลังเพิ่ม Tool...",async()=>{await apiWrite(data);$("#toolDialog").close();showNotice("ส่งคำสั่งเพิ่ม Tool แล้ว ระบบโหลดข้อมูลล่าสุดจาก Google Sheets แล้ว","success");});
 }
 async function submitAction(e){
-  e.preventDefault();if(state.busy)return;const fd=new FormData(e.currentTarget);const data=Object.fromEntries(fd.entries());
-  if(data.actionType==="move"){
-    if(!data.destination){showNotice("กรุณาเลือก Line ปลายทาง","error");return;}
-    data.action="moveTool";data.toLine=data.destination;delete data.destination;delete data.actionType;
-    const t=state.tools.find(x=>x.serial===data.serial);if(t&&t.line===data.toLine){showNotice("Tool อยู่ใน Line นี้อยู่แล้ว","");return;}
-    if(!confirm(`ยืนยันย้าย Tool ${data.serial} ไปยัง ${data.toLine} ?`))return;
-  }else{
-    data.action="swapTools";data.serialA=data.serial;data.serialB=data.swapSerial;delete data.serial;delete data.swapSerial;delete data.actionType;
-    if(!data.serialB){showNotice("ไม่มี Tool อื่นให้สลับ","error");return;}
-    if(!confirm(`ยืนยันสลับตำแหน่ง Tool ${data.serialA} กับ ${data.serialB} ?`))return;
+  e.preventDefault();if(state.busy)return;
+  const fd=new FormData(e.currentTarget),data=Object.fromEntries(fd.entries());
+  const isDamage=data.actionType==="damage";
+  if(isDamage){
+    if(!data.backupSerial){showNotice("กรุณาเลือก Back up tool ที่จะนำมาแทน","error");return;}
+    const damaged=state.tools.find(t=>t.serial===data.serial);
+    const backup=state.tools.find(t=>t.serial===data.backupSerial);
+    if(!damaged||!backup){showNotice("ไม่พบ Tool ที่เลือก กรุณากด Refresh","error");return;}
+    if(normalizeLineName(backup.line)!=="back up tool"){showNotice("เลือกได้เฉพาะ Tool ในหมวด Back up tool","error");return;}
+    if(!confirm(`ยืนยันย้าย ${damaged.serial} ไป Damage และนำ ${backup.serial} มาแทนที่ Line ${damaged.line} ?`))return;
+    data.action="damageReplace";data.damagedSerial=data.serial;delete data.serial;delete data.actionType;
+    await runMutation("กำลังบันทึก Damage และเปลี่ยน Tool...",async()=>{await apiWrite(data);$("#actionDialog").close();showNotice("บันทึก Damage และเปลี่ยน Tool แล้ว","success");});
+    return;
   }
-  await runMutation("กำลังบันทึกการเปลี่ยนตำแหน่ง...",async()=>{await apiWrite(data);$("#actionDialog").close();showNotice("ส่งคำสั่งแล้ว และโหลดข้อมูลล่าสุดจาก Google Sheets แล้ว","success");});
+
+  if(!data.swapSerial){showNotice("กรุณาเลือก Tool ที่ต้องการสลับตำแหน่ง","error");return;}
+  const first=state.tools.find(t=>t.serial===data.serial),second=state.tools.find(t=>t.serial===data.swapSerial);
+  if(!first||!second){showNotice("ไม่พบ Tool ที่เลือก กรุณากด Refresh","error");return;}
+  if(normalizeLineName(first.line)===normalizeLineName(second.line)){showNotice("Tool ทั้งสองอยู่ใน Line เดียวกัน ไม่จำเป็นต้องสลับ","error");return;}
+  data.action="swapTools";data.serialA=data.serial;data.serialB=data.swapSerial;delete data.serial;delete data.swapSerial;delete data.actionType;
+  if(!confirm(`ยืนยัน Move โดยสลับตำแหน่ง ${data.serialA} กับ ${data.serialB} ?`))return;
+  await runMutation("กำลังสลับตำแหน่ง Tool...",async()=>{await apiWrite(data);$("#actionDialog").close();showNotice("บันทึกการสลับตำแหน่งแล้ว","success");});
 }
 async function runMutation(msg,fn){
   state.busy=true;showNotice(msg);
@@ -320,7 +359,7 @@ function init(){
     const close=e.target.closest("[data-close]");if(close){$("#"+close.dataset.close).close();return;}
     const nav=e.target.closest("[data-view]");if(nav){setView(nav.dataset.view);return;}
     const line=e.target.closest("[data-line]");if(line){setView("line",line.dataset.line);return;}
-    const action=e.target.closest("[data-action]");if(action){if(action.dataset.action==="edit")openEditDialog(action.dataset.serial);else if(state.isAdmin)openActionDialog(action.dataset.action,action.dataset.serial);else showNotice("กรุณาเข้าสู่ระบบ Admin ก่อนดำเนินการ","error");return;}
+    const action=e.target.closest("[data-action]");if(action){if(action.dataset.action==="edit")openEditDialog(action.dataset.serial);else openActionDialog(action.dataset.action,action.dataset.serial);return;}
   });
   $("#adminBtn").addEventListener("click",()=>{
     if(state.isAdmin){if(confirm("ต้องการออกจากระบบ Admin หรือไม่?"))adminLogout();return;}
