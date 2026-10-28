@@ -491,6 +491,16 @@ function init(){
     if(action){
       e.preventDefault();
       if(action.dataset.action==="edit"){openEditDialog(action.dataset.serial);}
+      else if(action.dataset.action==="damage" && state.tools.some(t=>t.serial===action.dataset.serial && normalizeLineName(t.line)==="back up tool")){
+        const serial=action.dataset.serial;
+        const tool=state.tools.find(t=>t.serial===serial);
+        if(!tool){showNotice("ไม่พบ Tool ที่เลือก กรุณากด Refresh","error");return;}
+        if(!confirm(`ยืนยันเปลี่ยน Tool ${tool.toolModel} (${tool.serial}) จาก Back up tool เป็น Damage? จะเปลี่ยนเฉพาะคอลัมน์ A (Line) ข้อมูลคอลัมน์อื่นจะคงเดิม`))return;
+        await runMutation("กำลังเปลี่ยน Line เป็น Damage...",async()=>{
+          await apiWrite({action:"markBackupDamage",serial:tool.serial});
+          showNotice("เปลี่ยน Tool เป็น Damage แล้ว โดยคงข้อมูลคอลัมน์อื่นเดิม","success");
+        });
+      }
       else if(action.dataset.action==="transferToBackup"){
         const serial=action.dataset.serial;
         const tool=state.tools.find(t=>t.serial===serial);
