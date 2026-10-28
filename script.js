@@ -249,7 +249,7 @@ function renderTools(){
     const editButton=state.isAdmin && t.serial?`<button class="mini-btn" data-action="edit" data-serial="${esc(t.serial)}">Edit</button>`:"";
     const damageButton=isDamage || !t.serial?"":`<button class="mini-btn danger-action" data-action="damage" data-serial="${esc(t.serial)}">Damage</button>`;
     const moveButton=t.serial?`<button class="mini-btn" data-action="move" data-serial="${esc(t.serial)}">Move</button>`:"";
-    const deleteButton=state.isAdmin?`<button class="mini-btn danger-action" data-action="delete" data-row="${esc(t._row)}" data-serial="${esc(t.serial)}" data-model="${esc(t.toolModel)}" data-line="${esc(t.line)}">Delete</button>`:"";
+    const deleteButton=state.isAdmin?`<button type="button" class="mini-btn danger-action" data-action="delete" data-row="${esc(t._row)}" data-serial="${esc(t.serial)}" data-model="${esc(t.toolModel)}" data-line="${esc(t.line)}" onclick="return window.atlasDeleteClick(this, event)">Delete</button>`:"";
     return `<tr>
       <td><div class="tool-name">${esc(t.toolModel||"ไม่ระบุ Model")}</div><div class="tool-serial">${esc(t.serial||"ไม่มี Serial")}</div></td>
       <td><span class="line-pill" title="${esc(t.line)}">${esc(t.line)}</span></td>
@@ -407,6 +407,24 @@ async function runMutation(message,fn){
     restoreTableViewState(savedView);
   }
 }
+// Direct click entry point for the Delete button. Stops delegated handlers from firing twice.
+window.atlasDeleteClick = async function(button, event){
+  if(event){
+    event.preventDefault();
+    event.stopPropagation();
+  }
+  if(!button || button.disabled || state.busy) return false;
+  button.disabled = true;
+  try {
+    await deleteToolRecord(button);
+  } catch(err) {
+    showNotice(err?.message || String(err), "error");
+  } finally {
+    if(button.isConnected) button.disabled = false;
+  }
+  return false;
+};
+
 async function deleteToolRecord(button){
   if(!state.isAdmin){showNotice("กรุณาเข้าสู่ระบบ Admin ก่อนลบข้อมูล","error");return;}
   if(state.busy)return;
@@ -460,12 +478,8 @@ function init(){
       e.preventDefault();
       if(action.dataset.action==="edit"){openEditDialog(action.dataset.serial);}
       else if(action.dataset.action==="delete"){
-        // Disable the clicked button immediately so repeated clicks cannot start duplicate requests.
-        if(action.disabled || state.busy) return;
-        action.disabled = true;
-        try { await deleteToolRecord(action); }
-        catch(err) { showNotice(err?.message || String(err), "error"); }
-        finally { if(action.isConnected) action.disabled = false; }
+        // Delete uses the button's direct click handler to ensure the confirmation opens.
+        return;
       } else { openActionDialog(action.dataset.action,action.dataset.serial); }
       return;
     }
