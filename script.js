@@ -162,7 +162,7 @@ async function adminLogin(password){
   const sessionId=makeSessionId();
   await postRaw({action:"adminLogin",adminPassword:password,sessionId});
   const check=await apiRead("adminStatus",{sessionId});
-  if(!check.admin) throw new Error("รหัสผ่าน Admin ไม่ถูกต้อง หรือ Apps Script ยังไม่ได้อัปเดต");
+  if(!check.admin) throw new Error("รหัสผ่าน Admin ไม่ถูกต้อง หรือ Script ยังไม่ได้อัปเดต");
   state.adminSessionId=sessionId;state.isAdmin=true;
   $("#adminBtn").textContent="Admin · Logout";
   renderTools();
@@ -186,9 +186,9 @@ async function submitEdit(e){
   data.action="updateTool";data.adminSessionId=state.adminSessionId;
   data.tightenings=data.tightenings===""?"":Number(data.tightenings);
   if(!data.serial.trim()||!data.toolModel.trim()){showNotice("กรุณากรอก Model และ Serial No.","error");return;}
-  if(!confirm(`ยืนยันบันทึกการแก้ไข Tool ${data.originalSerial} ลง Google Sheets?`))return;
-  await runMutation("กำลังบันทึกข้อมูล Tool ลง Google Sheets...",async()=>{
-    await apiWrite(data);$("#editToolDialog").close();showNotice("บันทึกข้อมูลลง Google Sheets แล้ว","success");
+  if(!confirm(`ยืนยันบันทึกการแก้ไข Tool ${data.originalSerial} ลง Sheets?`))return;
+  await runMutation("กำลังบันทึกข้อมูล Tool ลง Sheets...",async()=>{
+    await apiWrite(data);$("#editToolDialog").close();showNotice("บันทึกข้อมูลลง Sheets แล้ว","success");
   });
 }
 
@@ -301,14 +301,14 @@ function renderHistory(){
 function renderAll(){renderStats();renderTools();renderHistory();$("#lastUpdated").textContent="อัปเดตล่าสุด "+new Date().toLocaleTimeString("th-TH",{hour:"2-digit",minute:"2-digit",second:"2-digit"});}
 async function refreshAll(options={}){
   hideNotice();
-  if(!hasApi()){showNotice("กรุณาตั้งค่า Apps Script Web App URL และ API key ก่อนใช้งาน โดยกดปุ่มตั้งค่าที่แถบเมนู (คลิกชื่อ ATLAS-Data Base หรือกด Alt+S)","");$("#connectionLabel").textContent="ยังไม่ได้ตั้งค่า API";$("#toolTableBody").innerHTML='<tr><td colspan="9" class="empty">ยังไม่ได้เชื่อมต่อ Google Sheets API</td></tr>';return;}
+  if(!hasApi()){showNotice("กรุณาตั้งค่า Apps Script Web App URL และ API key ก่อนใช้งาน โดยกดปุ่มตั้งค่าที่แถบเมนู (คลิกชื่อ ATLAS-Data Base หรือกด Alt+S)","");$("#connectionLabel").textContent="ยังไม่ได้ตั้งค่า API";$("#toolTableBody").innerHTML='<tr><td colspan="9" class="empty">ยังไม่ได้เชื่อมต่อ Sheets API</td></tr>';return;}
   try{
     $("#connectionLabel").textContent="กำลังเชื่อมต่อ...";
     const [list,hist]=await Promise.all([apiRead("list"),apiRead("history")]);
     state.tools=(list.tools||[]).map(normalizeTool);state.history=hist.history||[];
     $("#connectionLabel").textContent="เชื่อมต่อ API แล้ว";$(".status-dot")?.classList.add("online");
-    renderAll();showNotice("โหลดข้อมูลจาก Google Sheets สำเร็จ","success");
-    setTimeout(()=>{if($("#notice").textContent==="โหลดข้อมูลจาก Google Sheets สำเร็จ")hideNotice();},3500);
+    renderAll();showNotice("โหลดข้อมูลจาก Sheets สำเร็จ","success");
+    setTimeout(()=>{if($("#notice").textContent==="โหลดข้อมูลจาก Sheets สำเร็จ")hideNotice();},3500);
   }catch(e){$("#connectionLabel").textContent="เชื่อมต่อไม่สำเร็จ";$(".status-dot")?.classList.remove("online");showNotice("เชื่อมต่อไม่สำเร็จ: "+e.message+" — ตรวจสอบ URL, API key และการ Deploy Apps Script","error");}
 
   if(options.preserveView && options.savedView){
@@ -359,7 +359,7 @@ async function submitAdd(e){
   data.action="addTool";data.serial=data.serial.trim();data.tightenings=data.tightenings?Number(data.tightenings):"";
   if(!data.serial){showNotice("กรุณาระบุ Serial No.","error");return;}
   if(state.tools.some(t=>t.serial.toLowerCase()===data.serial.toLowerCase())){showNotice("Serial No. นี้มีอยู่แล้ว กรุณาตรวจสอบข้อมูล","error");return;}
-  await runMutation("กำลังเพิ่ม Tool...",async()=>{await apiWrite(data);$("#toolDialog").close();showNotice("ส่งคำสั่งเพิ่ม Tool แล้ว ระบบโหลดข้อมูลล่าสุดจาก Google Sheets แล้ว","success");});
+  await runMutation("กำลังเพิ่ม Tool...",async()=>{await apiWrite(data);$("#toolDialog").close();showNotice("ส่งคำสั่งเพิ่ม Tool แล้ว ระบบโหลดข้อมูลล่าสุดจาก Sheets แล้ว","success");});
 }
 async function submitAction(e){
   e.preventDefault();if(state.busy)return;
@@ -447,7 +447,7 @@ async function deleteToolRecord(button){
   const model=button.dataset.model||"";
   const line=button.dataset.line||"";
   const identity=serial ? `${model} (Serial: ${serial})` : model;
-  const confirmed=confirm(`ยืนยันลบ ${identity || "รายการนี้"} จาก Line/หมวด "${line}" หรือไม่?\n\nระบบจะลบแถวนี้ออกจาก Google Sheets จริง และไม่สามารถกู้คืนจากหน้าเว็บได้`);
+  const confirmed=confirm(`ยืนยันลบ ${identity || "รายการนี้"} จาก Line/หมวด "${line}" หรือไม่?\n\nระบบจะลบแถวนี้ออกจาก Sheets จริง และไม่สามารถกู้คืนจากหน้าเว็บได้`);
   if(!confirmed)return;
   const sameRecordCount = (items) => items.filter(t =>
     String(t.serial||"").trim()===serial &&
@@ -456,7 +456,7 @@ async function deleteToolRecord(button){
   ).length;
   const beforeCount = sameRecordCount(state.tools);
   try {
-    await runMutation("กำลังลบข้อมูลจาก Google Sheets...",async()=>{
+    await runMutation("กำลังลบข้อมูลจาก Sheets...",async()=>{
       await apiWrite({
         action:"deleteTool",
         adminSessionId:state.adminSessionId,
@@ -467,9 +467,9 @@ async function deleteToolRecord(button){
       });
       const afterCount = sameRecordCount(state.tools);
       if(afterCount >= beforeCount){
-        throw new Error("ยังไม่พบการเปลี่ยนแปลงหลังโหลดข้อมูลจาก Google Sheets กรุณาตรวจสอบ Apps Script เวอร์ชันที่ Deploy และสิทธิ์ Admin");
+        throw new Error("ยังไม่พบการเปลี่ยนแปลงหลังโหลดข้อมูลจาก Sheets กรุณาตรวจสอบ Apps Script เวอร์ชันที่ Deploy และสิทธิ์ Admin");
       }
-      showNotice(`ลบ ${identity || "รายการ"} ออกจาก Google Sheets แล้ว`,"success");
+      showNotice(`ลบ ${identity || "รายการ"} ออกจาก Sheets แล้ว`,"success");
     });
   } catch(err) {
     showNotice(err?.message || String(err), "error");
@@ -546,7 +546,7 @@ function init(){
   $("#mobileMenu").addEventListener("click",()=>$("#sidebar").classList.toggle("open"));
   // Settings can be opened with Alt+S. API settings are saved in this browser's localStorage.
   document.addEventListener("keydown",e=>{if(e.altKey&&e.key.toLowerCase()==="s"){e.preventDefault();openSettings();}});
-  // Restore saved API settings and load Google Sheets automatically on page refresh.
+  // Restore saved API settings and load Sheets automatically on page refresh.
   loadApiSettings();
   setView("dashboard");
   refreshAll();
