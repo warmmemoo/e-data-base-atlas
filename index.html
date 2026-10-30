@@ -10,17 +10,17 @@
   <div class="app-shell">
     <aside class="sidebar" id="sidebar">
       <div class="brand">
-        <div class="brand-mark">ENG</div>
+        <div class="brand-mark">A</div>
         <div><strong>ATLAS-Data Base</strong><span>ATLAS TOOL MANAGEMENT</span></div>
       </div>
-      <button class="nav-item active" data-view="dashboard"><span>📉</span> Dashboard</button>
+      <button class="nav-item active" data-view="dashboard"><span>▦</span> Dashboard</button>
       <div class="nav-heading">LINE</div>
       <nav id="lineNav" class="line-nav"></nav>
       <div class="nav-heading">OTHER</div>
-      <button class="nav-item" data-view="backup"><span>🔀</span> Back up <span class="nav-count" id="backupCount">0</span></button>
+      <button class="nav-item" data-view="backup"><span>▣</span> Back up <span class="nav-count" id="backupCount">0</span></button>
       <nav id="backupNav" class="line-nav backup-nav"></nav>
-      <button class="nav-item line-item damage-nav-item" data-line="Damage"><span>🚫</span> Damage</button>
-      <button class="nav-item" data-view="history"><span>🔄</span> Movement History</button>
+      <button class="nav-item line-item damage-nav-item" data-line="Damage"><span>◦</span> Damage</button>
+      <button class="nav-item" data-view="history"><span>↻</span> Movement History</button>
       <div class="sidebar-bottom">
         <span class="status-dot"></span><span id="connectionLabel">กำลังตรวจสอบการเชื่อมต่อ</span>
       </div>
@@ -54,14 +54,14 @@
             <button class="btn btn-secondary" id="refreshBtn">↻ Refresh</button>
           </div>
           <div class="filters">
-            <label class="search-box"><span>⌕</span><input id="searchInput" type="search" placeholder="ค้นหา Serial, Model, Process, IP..."></label>
+            <label class="search-box"><span>⌕</span><input id="searchInput" type="search" placeholder="ค้นหา Serial, Model, Detail/Comment, Process, IP..."></label>
             <select id="statusFilter" aria-label="กรองตาม Calibration"><option value="">ทุกสถานะ Calibration</option><option value="ok">OK</option><option value="soon">Due Soon</option><option value="overdue">Overdue</option><option value="unknown">ไม่ระบุวันที่</option></select>
             <select id="sortSelect" aria-label="เรียงลำดับ"><option value="line">เรียงตาม Line</option><option value="serial">เรียงตาม Serial</option><option value="calibration">เรียงตามวัน Calibration</option></select>
           </div>
           <div class="table-wrap">
             <table>
-              <thead><tr><th>Tool / Serial No.</th><th>Line / Location</th><th>Process</th><th>Controller</th><th>IP Address</th><th>Current Calibration</th><th>Next Calibration</th><th>Status</th><th>Actions</th></tr></thead>
-              <tbody id="toolTableBody"><tr><td colspan="9" class="empty">กำลังโหลดข้อมูล...</td></tr></tbody>
+              <thead><tr><th>Tool / Serial No.</th><th>Line / Location</th><th>Detail / Comment</th><th>Process</th><th>Controller</th><th>IP Address</th><th>Current Calibration</th><th>Next Calibration</th><th>Status</th><th>Actions</th></tr></thead>
+              <tbody id="toolTableBody"><tr><td colspan="10" class="empty">กำลังโหลดข้อมูล...</td></tr></tbody>
             </table>
           </div>
           <div class="table-footer"><span id="resultCount">0 รายการ</span><span>ข้อมูลอ้างอิงจาก Sheet</span></div>
@@ -91,7 +91,7 @@
         <label>Total No. of Tightenings <input name="tightenings" type="number" min="0" placeholder="1700000"></label>
         <label>Current Calibration Date <input name="currentCalibration" type="date"></label>
         <label>Next Calibration Date <input name="nextCalibration" type="date"></label>
-        <label class="full">Notes <textarea name="notes" rows="2" placeholder="หมายเหตุเพิ่มเติม"></textarea></label>
+        <label class="full">Detail / Comment <textarea name="detail" rows="3" placeholder="บันทึก comment หรือรายละเอียดของ Tool"></textarea></label>
       </div>
       <div class="modal-actions"><button type="button" class="btn btn-secondary" data-close="toolDialog">ยกเลิก</button><button type="submit" class="btn btn-primary">บันทึก Tool</button></div>
     </form>
@@ -115,7 +115,7 @@
         <label>No. <input name="rowNo" type="text"></label>
         <label>Tools Model <input name="toolModel" required></label>
         <label>Tools MS Serial No. <input name="serial" required></label>
-        <label>Status <input name="status" placeholder="เช่น ใช้งาน / ซ่อม / Damage"></label>
+        <label class="full">Detail / Comment <textarea name="detail" rows="3" placeholder="บันทึก comment หรือรายละเอียดของ Tool"></textarea></label>
         <label>Process <input name="process"></label>
         <label>Total No. of Tightenings <input name="tightenings" type="number" min="0"></label>
         <label>IP Address <input name="ipAddress"></label>
