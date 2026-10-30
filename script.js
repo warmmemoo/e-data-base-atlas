@@ -39,6 +39,8 @@ const aliasMap = {
   toolModel: ["tools model","tool model","model","tool_model","model tool"],
   serial: ["tools ms serial no.","tools ms serial number","serial no","serial number","serial","tool serial","tool ms serial no","serial no."],
   line: ["line","location","line/location","tool location","area","section"],
+  detail: ["detail / comment","detail","comment","description","remarks"],
+  status: ["status"],
   process: ["process","process name"],
   tightenings: ["total no. of tightenings","total no of tightenings","total tightenings","tightening count","no. of tightenings","total tightening"],
   ipAddress: ["ip address","ip","ip address of tool"],
@@ -111,6 +113,7 @@ function dateValue(v){
 }
 function fmtDate(v){const d=dateValue(v);return d?d.toLocaleDateString("en-GB",{day:"2-digit",month:"short",year:"numeric"}):"—";}
 function calStatus(tool){
+  if(normalizeLineName(tool.line)==="damage") return {key:"damage",label:"Damage"};
   const d=dateValue(tool.nextCalibration); if(!d)return {key:"unknown",label:"ไม่ระบุวันที่"};
   const now=new Date(); now.setHours(0,0,0,0); d.setHours(0,0,0,0);
   const days=Math.ceil((d-now)/86400000);
@@ -146,6 +149,7 @@ async function apiWrite(payload){
   const refreshed=await apiRead("list");
   state.tools=(refreshed.tools||[]).map(normalizeTool);
   try{const h=await apiRead("history");state.history=h.history||[];}catch(_){}
+  await syncStatusesToSheet();
   renderAll();
   return true;
 }
@@ -158,11 +162,31 @@ async function postRaw(payload){
   await fetch(state.apiUrl,{method:"POST",mode:"no-cors",redirect:"follow",headers:{"Content-Type":"text/plain;charset=utf-8"},body:JSON.stringify({...payload,key:state.apiKey})});
   await new Promise(r=>setTimeout(r,350));
 }
+function sheetStatusForTool(tool){
+  if(normalizeLineName(tool.line)==="damage") return "Damage";
+  const status=calStatus(tool);
+  return status.key==="unknown" ? "" : status.label;
+}
+async function syncStatusesToSheet(){
+  if(!hasApi()) return 0;
+  const updates=state.tools.map(t=>({
+    row:Number(t._row), serial:String(t.serial||"").trim(), toolModel:String(t.toolModel||"").trim(),
+    status:sheetStatusForTool(t), currentStatus:String(t.status||"").trim()
+  })).filter(t=>Number.isInteger(t.row) && t.row>=3 && t.status!==t.currentStatus);
+  if(!updates.length) return 0;
+  await postRaw({action:"syncStatuses",updates:updates.map(({row,serial,toolModel,status})=>({row,serial,toolModel,status}))});
+  // Verify the write by reading back the authoritative Sheet values.
+  const list=await apiRead("list");
+  state.tools=(list.tools||[]).map(normalizeTool);
+  const stillDifferent=state.tools.filter(t=>sheetStatusForTool(t)!==String(t.status||"").trim());
+  if(stillDifferent.length) throw new Error("บันทึก Status ลงคอลัมน์ K ไม่ครบ กรุณาตรวจสอบ Apps Script Deployment");
+  return updates.length;
+}
 async function adminLogin(password){
   const sessionId=makeSessionId();
   await postRaw({action:"adminLogin",adminPassword:password,sessionId});
   const check=await apiRead("adminStatus",{sessionId});
-  if(!check.admin) throw new Error("รหัสผ่าน Admin ไม่ถูกต้อง หรือ Script ยังไม่ได้อัปเดต");
+  if(!check.admin) throw new Error("รหัสผ่าน Admin ไม่ถูกต้อง หรือ Apps Script ยังไม่ได้อัปเดต");
   state.adminSessionId=sessionId;state.isAdmin=true;
   $("#adminBtn").textContent="Admin · Logout";
   renderTools();
@@ -173,7 +197,7 @@ function openEditDialog(serial){
   if(!state.isAdmin){showNotice("กรุณาเข้าสู่ระบบ Admin ก่อนแก้ไขข้อมูล","error");return;}
   const t=state.tools.find(x=>x.serial===serial);if(!t)return;
   const f=$("#editToolForm");f.reset();
-  for(const key of ["line","rowNo","toolModel","serial","status","process","tightenings","ipAddress","controller"]){if(f.elements[key])f.elements[key].value=t[key]??"";}
+  for(const key of ["line","rowNo","toolModel","serial","detail","process","tightenings","ipAddress","controller"]){if(f.elements[key])f.elements[key].value=t[key]??"";}
   f.elements.originalSerial.value=t.serial;
   f.elements.currentCalibration.value=dateInputValue(t.currentCalibration);
   f.elements.nextCalibration.value=dateInputValue(t.nextCalibration);
@@ -186,9 +210,9 @@ async function submitEdit(e){
   data.action="updateTool";data.adminSessionId=state.adminSessionId;
   data.tightenings=data.tightenings===""?"":Number(data.tightenings);
   if(!data.serial.trim()||!data.toolModel.trim()){showNotice("กรุณากรอก Model และ Serial No.","error");return;}
-  if(!confirm(`ยืนยันบันทึกการแก้ไข Tool ${data.originalSerial} ลง Sheets?`))return;
-  await runMutation("กำลังบันทึกข้อมูล Tool ลง Sheets...",async()=>{
-    await apiWrite(data);$("#editToolDialog").close();showNotice("บันทึกข้อมูลลง Sheets แล้ว","success");
+  if(!confirm(`ยืนยันบันทึกการแก้ไข Tool ${data.originalSerial}?`))return;
+  await runMutation("กำลังบันทึกข้อมูล Tool...",async()=>{
+    await apiWrite(data);$("#editToolDialog").close();showNotice("บันทึกข้อมูล Tool แล้ว","success");
   });
 }
 
@@ -236,7 +260,7 @@ function currentTools(){
     // Accessories, and Damage.
     arr=arr.filter(t=>normalizeLineName(t.line)===normalizeLineName(state.selectedLine));
   }
-  if(search)arr=arr.filter(t=>[t.toolModel,t.serial,t.process,t.ipAddress,t.controller,t.line].some(v=>String(v||"").toLowerCase().includes(search)));
+  if(search)arr=arr.filter(t=>[t.toolModel,t.serial,t.detail,t.process,t.ipAddress,t.controller,t.line].some(v=>String(v||"").toLowerCase().includes(search)));
   if(status)arr=arr.filter(t=>calStatus(t).key===status);
   const lineOrder = new Map(LINES.map((name,index)=>[normalizeLineName(name),index]));
   arr.sort((a,b)=>sort==="serial"
@@ -249,7 +273,7 @@ function currentTools(){
 }
 function renderTools(){
   const arr=currentTools();$("#resultCount").textContent=`${arr.length} รายการ`;
-  if(!arr.length){$("#toolTableBody").innerHTML=`<tr><td colspan="9" class="empty">${state.tools.length?"ไม่พบ Tool ตามเงื่อนไข":"ยังไม่มีข้อมูล Tool หรือยังไม่ได้เชื่อมต่อ API"}</td></tr>`;return;}
+  if(!arr.length){$("#toolTableBody").innerHTML=`<tr><td colspan="10" class="empty">${state.tools.length?"ไม่พบ Tool ตามเงื่อนไข":"ยังไม่มีข้อมูล Tool หรือยังไม่ได้เชื่อมต่อ API"}</td></tr>`;return;}
   $("#toolTableBody").innerHTML=arr.map(t=>{
     const st=calStatus(t);
     const isDamage=normalizeLineName(t.line)==="damage";
@@ -262,6 +286,7 @@ function renderTools(){
     return `<tr>
       <td><div class="tool-name">${esc(t.toolModel||"ไม่ระบุ Model")}</div><div class="tool-serial">${esc(t.serial||"ไม่มี Serial")}</div></td>
       <td><span class="line-pill" title="${esc(t.line)}">${esc(t.line)}</span></td>
+      <td class="detail-cell" title="${esc(t.detail||"")}">${esc(t.detail||"—")}</td>
       <td>${esc(t.process||"—")}</td><td>${esc(t.controller||"—")}</td><td>${esc(t.ipAddress||"—")}</td>
       <td>${esc(fmtDate(t.currentCalibration))}</td><td>${esc(fmtDate(t.nextCalibration))}</td><td>${statusBadge}</td>
       <td><div class="row-actions">${editButton}${damageButton}${moveButton}${transferToBackupButton}${deleteButton}${(!editButton&&!damageButton&&!moveButton&&!transferToBackupButton&&!deleteButton)?'<span class="muted">—</span>':""}</div></td>
@@ -301,14 +326,21 @@ function renderHistory(){
 function renderAll(){renderStats();renderTools();renderHistory();$("#lastUpdated").textContent="อัปเดตล่าสุด "+new Date().toLocaleTimeString("th-TH",{hour:"2-digit",minute:"2-digit",second:"2-digit"});}
 async function refreshAll(options={}){
   hideNotice();
-  if(!hasApi()){showNotice("กรุณาตั้งค่า Apps Script Web App URL และ API key ก่อนใช้งาน โดยกดปุ่มตั้งค่าที่แถบเมนู (คลิกชื่อ ATLAS-Data Base หรือกด Alt+S)","");$("#connectionLabel").textContent="ยังไม่ได้ตั้งค่า API";$("#toolTableBody").innerHTML='<tr><td colspan="9" class="empty">ยังไม่ได้เชื่อมต่อ Sheets API</td></tr>';return;}
+  if(!hasApi()){showNotice("กรุณาตั้งค่า Apps Script Web App URL และ API key ก่อนใช้งาน โดยกดปุ่มตั้งค่าที่แถบเมนู (คลิกชื่อ ATLAS-Data Base หรือกด Alt+S)","");$("#connectionLabel").textContent="ยังไม่ได้ตั้งค่า API";$("#toolTableBody").innerHTML='<tr><td colspan="10" class="empty">ยังไม่ได้เชื่อมต่อ Google Sheets API</td></tr>';return;}
   try{
     $("#connectionLabel").textContent="กำลังเชื่อมต่อ...";
     const [list,hist]=await Promise.all([apiRead("list"),apiRead("history")]);
     state.tools=(list.tools||[]).map(normalizeTool);state.history=hist.history||[];
+    let statusSyncError=null;
+    try { await syncStatusesToSheet(); } catch(syncError) { statusSyncError=syncError; console.warn("Status sync failed:", syncError); }
     $("#connectionLabel").textContent="เชื่อมต่อ API แล้ว";$(".status-dot")?.classList.add("online");
-    renderAll();showNotice("โหลดข้อมูลจาก Sheets สำเร็จ","success");
-    setTimeout(()=>{if($("#notice").textContent==="โหลดข้อมูลจาก Sheets สำเร็จ")hideNotice();},3500);
+    renderAll();
+    if(statusSyncError){
+      showNotice("โหลดข้อมูลได้ แต่บันทึก Status ลงคอลัมน์ K ไม่สำเร็จ: "+statusSyncError.message,"error");
+    }else{
+      showNotice("โหลดข้อมูลสำเร็จ","success");
+      setTimeout(()=>{if($("#notice").textContent==="โหลดข้อมูลสำเร็จ")hideNotice();},3500);
+    }
   }catch(e){$("#connectionLabel").textContent="เชื่อมต่อไม่สำเร็จ";$(".status-dot")?.classList.remove("online");showNotice("เชื่อมต่อไม่สำเร็จ: "+e.message+" — ตรวจสอบ URL, API key และการ Deploy Apps Script","error");}
 
   if(options.preserveView && options.savedView){
@@ -359,7 +391,7 @@ async function submitAdd(e){
   data.action="addTool";data.serial=data.serial.trim();data.tightenings=data.tightenings?Number(data.tightenings):"";
   if(!data.serial){showNotice("กรุณาระบุ Serial No.","error");return;}
   if(state.tools.some(t=>t.serial.toLowerCase()===data.serial.toLowerCase())){showNotice("Serial No. นี้มีอยู่แล้ว กรุณาตรวจสอบข้อมูล","error");return;}
-  await runMutation("กำลังเพิ่ม Tool...",async()=>{await apiWrite(data);$("#toolDialog").close();showNotice("ส่งคำสั่งเพิ่ม Tool แล้ว ระบบโหลดข้อมูลล่าสุดจาก Sheets แล้ว","success");});
+  await runMutation("กำลังเพิ่ม Tool...",async()=>{await apiWrite(data);$("#toolDialog").close();showNotice("ส่งคำสั่งเพิ่ม Tool แล้ว ระบบโหลดข้อมูลล่าสุดจาก Google Sheets แล้ว","success");});
 }
 async function submitAction(e){
   e.preventDefault();if(state.busy)return;
@@ -447,7 +479,7 @@ async function deleteToolRecord(button){
   const model=button.dataset.model||"";
   const line=button.dataset.line||"";
   const identity=serial ? `${model} (Serial: ${serial})` : model;
-  const confirmed=confirm(`ยืนยันลบ ${identity || "รายการนี้"} จาก Line/หมวด "${line}" หรือไม่?\n\nระบบจะลบแถวนี้ออกจาก Sheets จริง และไม่สามารถกู้คืนจากหน้าเว็บได้`);
+  const confirmed=confirm(`ยืนยันลบ ${identity || "รายการนี้"} จาก Line/หมวด "${line}" หรือไม่?\n\nระบบจะลบแถวนี้ออกจาก Google Sheets จริง และไม่สามารถกู้คืนจากหน้าเว็บได้`);
   if(!confirmed)return;
   const sameRecordCount = (items) => items.filter(t =>
     String(t.serial||"").trim()===serial &&
@@ -456,7 +488,7 @@ async function deleteToolRecord(button){
   ).length;
   const beforeCount = sameRecordCount(state.tools);
   try {
-    await runMutation("กำลังลบข้อมูลจาก Sheets...",async()=>{
+    await runMutation("กำลังลบข้อมูลจาก Google Sheets...",async()=>{
       await apiWrite({
         action:"deleteTool",
         adminSessionId:state.adminSessionId,
@@ -467,9 +499,9 @@ async function deleteToolRecord(button){
       });
       const afterCount = sameRecordCount(state.tools);
       if(afterCount >= beforeCount){
-        throw new Error("ยังไม่พบการเปลี่ยนแปลงหลังโหลดข้อมูลจาก Sheets กรุณาตรวจสอบ Apps Script เวอร์ชันที่ Deploy และสิทธิ์ Admin");
+        throw new Error("ยังไม่พบการเปลี่ยนแปลงหลังโหลดข้อมูลจาก Google Sheets กรุณาตรวจสอบ Apps Script เวอร์ชันที่ Deploy และสิทธิ์ Admin");
       }
-      showNotice(`ลบ ${identity || "รายการ"} ออกจาก Sheets แล้ว`,"success");
+      showNotice(`ลบ ${identity || "รายการ"} ออกจาก Google Sheets แล้ว`,"success");
     });
   } catch(err) {
     showNotice(err?.message || String(err), "error");
@@ -546,10 +578,9 @@ function init(){
   $("#mobileMenu").addEventListener("click",()=>$("#sidebar").classList.toggle("open"));
   // Settings can be opened with Alt+S. API settings are saved in this browser's localStorage.
   document.addEventListener("keydown",e=>{if(e.altKey&&e.key.toLowerCase()==="s"){e.preventDefault();openSettings();}});
-  // Restore saved API settings and load Sheets automatically on page refresh.
+  // Restore saved API settings and load Google Sheets automatically on page refresh.
   loadApiSettings();
   setView("dashboard");
   refreshAll();
 }
 init();
-
