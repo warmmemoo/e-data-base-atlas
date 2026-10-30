@@ -35,6 +35,7 @@
         </div>
         <div class="top-actions">
           <span class="last-updated" id="lastUpdated">ยังไม่ได้โหลดข้อมูล</span>
+          <button class="btn btn-secondary hidden" id="apiSettingsBtn" type="button">API Settings</button>
           <button class="btn btn-primary" id="adminBtn">Admin Login</button>
         </div>
       </header>
@@ -145,10 +146,11 @@
   <dialog id="settingsDialog" class="modal compact">
     <form id="settingsForm" method="dialog">
       <div class="modal-header"><div><div class="eyebrow">API CONNECTION</div><h2>ตั้งค่าการเชื่อมต่อ</h2></div><button type="button" class="icon-btn" data-close="settingsDialog">×</button></div>
-      <p class="muted">ใส่ URL ของ Apps Script Web App และ API key ที่ตั้งไว้ใน Script Properties ระบบจะเก็บไว้เฉพาะในหน่วยความจำของแท็บนี้ ไม่บันทึกลง source code</p>
+      <p class="muted" id="settingsHelp">การตั้งค่านี้มีผลกับทุกอุปกรณ์ที่ใช้เว็บไซต์ ATLAS-Data Base</p>
       <label>Apps Script Web App URL <input name="apiUrl" type="url" required placeholder="https://script.google.com/macros/s/.../exec"></label>
-      <label>API Key <input name="apiKey" required type="password" autocomplete="off" placeholder="API key ที่ตั้งไว้ใน Script Properties"></label>
-      <div class="modal-actions"><button type="button" class="btn btn-secondary" data-close="settingsDialog">ยกเลิก</button><button type="submit" class="btn btn-primary">เชื่อมต่อ</button></div>
+      <label>API Key ใหม่ <input name="apiKey" type="password" autocomplete="new-password" placeholder="เว้นว่างหากไม่ต้องการเปลี่ยน API key"></label>
+      <label>ยืนยันรหัสผ่าน Admin <input name="adminPassword" required type="password" autocomplete="current-password" placeholder="รหัสผ่าน Admin"></label>
+      <div class="modal-actions"><button type="button" class="btn btn-secondary" data-close="settingsDialog">ยกเลิก</button><button type="submit" class="btn btn-primary">ยืนยันและเชื่อมต่อ</button></div>
     </form>
   </dialog>
 
