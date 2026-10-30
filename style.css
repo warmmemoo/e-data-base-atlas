@@ -15,4 +15,3 @@
 
 /* Detail / Comment is readable and wraps long notes without forcing one-line rows. */
 .detail-cell{white-space:normal;min-width:180px;max-width:280px;overflow-wrap:anywhere;line-height:1.55;color:#46536a}
-
