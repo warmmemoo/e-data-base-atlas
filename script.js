@@ -13,7 +13,7 @@ const LINES = [
 ];
 const BACKUP_LINES = ["Back up tool", "Back up controller", "Accessories"];
 const $ = (s) => document.querySelector(s);
-const API_PROXY_URL = "https://REPLACE-WITH-YOUR-WORKER.workers.dev";
+const API_PROXY_URL = "atlas-data-base-api.warmmemoo.workers.dev";
 const state = { tools: [], history: [], view: "dashboard", selectedLine: "", busy: false, adminSessionId: "", isAdmin: false };
 const aliasMap = {
   toolModel: ["tools model","tool model","model","tool_model","model tool"],
