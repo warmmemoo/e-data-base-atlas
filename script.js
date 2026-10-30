@@ -1,5 +1,4 @@
-/* ATLAS-Data Base - GitHub Pages frontend
-   API URL and key are intentionally not hard-coded. Configure them in the Settings dialog. */
+/* ATLAS-Data Base - Frontend uses Cloudflare Worker proxy. GAS credentials are never stored in this browser. */
 const LINES = [
   "FRONT SEAT IMV 578W",
   "REAR SEAT IMV 578W",
@@ -14,27 +13,8 @@ const LINES = [
 ];
 const BACKUP_LINES = ["Back up tool", "Back up controller", "Accessories"];
 const $ = (s) => document.querySelector(s);
-const state = { tools: [], history: [], view: "dashboard", selectedLine: "", apiUrl: "", apiKey: "", busy: false, adminSessionId: "", isAdmin: false };
-
-function saveApiSettings() {
-  try {
-    localStorage.setItem("atlas_api_url", state.apiUrl);
-    localStorage.setItem("atlas_api_key", state.apiKey);
-  } catch (e) {
-    console.warn("ไม่สามารถบันทึกการตั้งค่าในเบราว์เซอร์ได้", e);
-  }
-}
-
-function loadApiSettings() {
-  try {
-    state.apiUrl = localStorage.getItem("atlas_api_url") || "";
-    state.apiKey = localStorage.getItem("atlas_api_key") || "";
-  } catch (e) {
-    state.apiUrl = "";
-    state.apiKey = "";
-    console.warn("ไม่สามารถอ่านการตั้งค่าจากเบราว์เซอร์ได้", e);
-  }
-}
+const API_PROXY_URL = "https://atlas-data-base-api.warmmemoo.workers.dev";
+const state = { tools: [], history: [], view: "dashboard", selectedLine: "", busy: false, adminSessionId: "", isAdmin: false };
 const aliasMap = {
   toolModel: ["tools model","tool model","model","tool_model","model tool"],
   serial: ["tools ms serial no.","tools ms serial number","serial no","serial number","serial","tool serial","tool ms serial no","serial no."],
@@ -123,29 +103,23 @@ function calStatus(tool){
 }
 function showNotice(msg,type=""){const n=$("#notice");n.textContent=msg;n.className="notice"+(type?" "+type:"");n.classList.remove("hidden");}
 function hideNotice(){$("#notice").classList.add("hidden");}
-function hasApi(){return Boolean(state.apiUrl && state.apiKey);}
-function jsonp(url){
-  return new Promise((resolve,reject)=>{
-    const cb="atlasCallback_"+Date.now()+"_"+Math.random().toString(36).slice(2);
-    const script=document.createElement("script"); const timer=setTimeout(()=>finish(new Error("หมดเวลารอ API")),18000);
-    function finish(err,data){clearTimeout(timer);delete window[cb];script.remove();err?reject(err):resolve(data);}
-    window[cb]=(data)=>finish(null,data); script.onerror=()=>finish(new Error("เรียก API ไม่สำเร็จ ตรวจ URL/Deployment")); 
-    script.src=url+(url.includes("?")?"&":"?")+"callback="+cb+"&_="+Date.now();
-    document.head.appendChild(script);
-  });
-}
+function hasApi(){return Boolean(API_PROXY_URL && !API_PROXY_URL.includes("REPLACE-WITH-YOUR-WORKER"));}
 async function apiRead(action,extra={}){
-  if(!hasApi())throw new Error("ยังไม่ได้ตั้งค่า API กรุณาเปิดตั้งค่าการเชื่อมต่อ");
-  const url=new URL(state.apiUrl);url.searchParams.set("action",action);url.searchParams.set("key",state.apiKey);
+  if(!hasApi()) throw new Error("ยังไม่ได้ตั้งค่า Cloudflare Worker URL ในไฟล์ script.js");
+  const url=new URL(API_PROXY_URL.replace(/\/$/,"")+"/api");
+  url.searchParams.set("action",action);
   Object.entries(extra).forEach(([k,v])=>url.searchParams.set(k,String(v)));
-  const data=await jsonp(url.toString());if(!data||data.ok!==true)throw new Error(data?.error||"API returned an error");return data;
+  const response=await fetch(url.toString(),{method:"GET",headers:{"Accept":"application/json"},cache:"no-store"});
+  const data=await response.json();
+  if(!response.ok || !data || data.ok!==true) throw new Error(data?.error||`Worker error (${response.status})`);
+  return data;
 }
 async function apiWrite(payload){
-  if(!hasApi())throw new Error("ยังไม่ได้ตั้งค่า API กรุณาเปิดตั้งค่าการเชื่อมต่อ");
-  // GAS cross-origin POST: use text/plain to avoid preflight. no-cors response is opaque;
-  // refresh the authoritative sheet after the request before reporting the result.
-  await fetch(state.apiUrl,{method:"POST",mode:"no-cors",redirect:"follow",headers:{"Content-Type":"text/plain;charset=utf-8"},body:JSON.stringify({...payload,key:state.apiKey})});
-  await new Promise(r=>setTimeout(r,1100));
+  if(!hasApi()) throw new Error("ยังไม่ได้ตั้งค่า Cloudflare Worker URL");
+  const response=await fetch(API_PROXY_URL.replace(/\/$/,"")+"/api",{method:"POST",headers:{"Content-Type":"application/json","Accept":"application/json"},body:JSON.stringify({...payload,adminSessionId:state.adminSessionId||""})});
+  const result=await response.json();
+  if(!response.ok || !result || result.ok!==true) throw new Error(result?.error||`Worker error (${response.status})`);
+  await new Promise(r=>setTimeout(r,700));
   const refreshed=await apiRead("list");
   state.tools=(refreshed.tools||[]).map(normalizeTool);
   try{const h=await apiRead("history");state.history=h.history||[];}catch(_){}
@@ -158,9 +132,12 @@ function makeSessionId(){
   return "atlas-"+Date.now().toString(36)+"-"+Math.random().toString(36).slice(2)+Math.random().toString(36).slice(2);
 }
 async function postRaw(payload){
-  if(!hasApi()) throw new Error("ยังไม่ได้ตั้งค่า API");
-  await fetch(state.apiUrl,{method:"POST",mode:"no-cors",redirect:"follow",headers:{"Content-Type":"text/plain;charset=utf-8"},body:JSON.stringify({...payload,key:state.apiKey})});
-  await new Promise(r=>setTimeout(r,350));
+  if(!hasApi()) throw new Error("ยังไม่ได้ตั้งค่า Cloudflare Worker URL");
+  const response=await fetch(API_PROXY_URL.replace(/\/$/,"")+"/api",{method:"POST",headers:{"Content-Type":"application/json","Accept":"application/json"},body:JSON.stringify({...payload,adminSessionId:state.adminSessionId||""})});
+  const data=await response.json();
+  if(!response.ok || !data || data.ok!==true) throw new Error(data?.error||`Worker error (${response.status})`);
+  await new Promise(r=>setTimeout(r,250));
+  return data;
 }
 function sheetStatusForTool(tool){
   if(normalizeLineName(tool.line)==="damage") return "Damage";
@@ -189,9 +166,10 @@ async function adminLogin(password){
   if(!check.admin) throw new Error("รหัสผ่าน Admin ไม่ถูกต้อง หรือ Apps Script ยังไม่ได้อัปเดต");
   state.adminSessionId=sessionId;state.isAdmin=true;
   $("#adminBtn").textContent="Admin · Logout";
+  $("#apiSettingsBtn").classList.remove("hidden");
   renderTools();
 }
-function adminLogout(){state.adminSessionId="";state.isAdmin=false;$("#adminBtn").textContent="Admin Login";renderTools();showNotice("ออกจากระบบ Admin แล้ว","success");}
+function adminLogout(){state.adminSessionId="";state.isAdmin=false;$("#adminBtn").textContent="Admin Login";$("#apiSettingsBtn").classList.add("hidden");renderTools();showNotice("ออกจากระบบ Admin แล้ว","success");}
 function dateInputValue(v){const d=dateValue(v);if(!d)return "";return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;}
 function openEditDialog(serial){
   if(!state.isAdmin){showNotice("กรุณาเข้าสู่ระบบ Admin ก่อนแก้ไขข้อมูล","error");return;}
@@ -326,7 +304,7 @@ function renderHistory(){
 function renderAll(){renderStats();renderTools();renderHistory();$("#lastUpdated").textContent="อัปเดตล่าสุด "+new Date().toLocaleTimeString("th-TH",{hour:"2-digit",minute:"2-digit",second:"2-digit"});}
 async function refreshAll(options={}){
   hideNotice();
-  if(!hasApi()){showNotice("กรุณาตั้งค่า Apps Script Web App URL และ API key ก่อนใช้งาน โดยกดปุ่มตั้งค่าที่แถบเมนู (คลิกชื่อ ATLAS-Data Base หรือกด Alt+S)","");$("#connectionLabel").textContent="ยังไม่ได้ตั้งค่า API";$("#toolTableBody").innerHTML='<tr><td colspan="10" class="empty">ยังไม่ได้เชื่อมต่อ Google Sheets API</td></tr>';return;}
+  if(!hasApi()){showNotice("ยังไม่ได้กำหนด Cloudflare Worker URL ใน script.js กรุณาติดต่อผู้ดูแลระบบ","");$("#connectionLabel").textContent="ยังไม่ได้ตั้งค่า API";$("#toolTableBody").innerHTML='<tr><td colspan="10" class="empty">ยังไม่ได้เชื่อมต่อ API</td></tr>';return;}
   try{
     $("#connectionLabel").textContent="กำลังเชื่อมต่อ...";
     const [list,hist]=await Promise.all([apiRead("list"),apiRead("history")]);
@@ -341,7 +319,7 @@ async function refreshAll(options={}){
       showNotice("โหลดข้อมูลสำเร็จ","success");
       setTimeout(()=>{if($("#notice").textContent==="โหลดข้อมูลสำเร็จ")hideNotice();},3500);
     }
-  }catch(e){$("#connectionLabel").textContent="เชื่อมต่อไม่สำเร็จ";$(".status-dot")?.classList.remove("online");showNotice("เชื่อมต่อไม่สำเร็จ: "+e.message+" — ตรวจสอบ URL, API key และการ Deploy Apps Script","error");}
+  }catch(e){$("#connectionLabel").textContent="เชื่อมต่อไม่สำเร็จ";$(".status-dot")?.classList.remove("online");showNotice("เชื่อมต่อไม่สำเร็จ: "+e.message+" — ตรวจสอบ Worker URL, การตั้งค่า Worker และ Apps Script Deployment","error");}
 
   if(options.preserveView && options.savedView){
     const saved = options.savedView;
@@ -508,8 +486,16 @@ async function deleteToolRecord(button){
   }
 }
 
-function openSettings(){
-  const f=$("#settingsForm");f.elements.apiUrl.value=state.apiUrl;f.elements.apiKey.value=state.apiKey;$("#settingsDialog").showModal();
+async function openSettings(){
+  if(!state.isAdmin){showNotice("การตั้งค่า API อนุญาตเฉพาะ Admin เท่านั้น","error");return;}
+  const f=$("#settingsForm"); f.reset();
+  try {
+    const cfg=await apiRead("config",{adminSessionId:state.adminSessionId});
+    f.elements.apiUrl.value=cfg.apiUrl||"";
+    f.elements.apiKey.value="";
+    $("#settingsHelp").textContent="การตั้งค่านี้มีผลกับทุกอุปกรณ์ที่ใช้เว็บไซต์ ATLAS-Data Base กรอก API key ใหม่เฉพาะเมื่อต้องการเปลี่ยนค่าเดิม";
+    $("#settingsDialog").showModal();
+  } catch(err){showNotice("อ่านการตั้งค่าระบบไม่สำเร็จ: "+err.message,"error");}
 }
 function init(){
   populateLines();
@@ -553,9 +539,10 @@ function init(){
   });
   $("#adminBtn").addEventListener("click",()=>{
     if(state.isAdmin){if(confirm("ต้องการออกจากระบบ Admin หรือไม่?"))adminLogout();return;}
-    if(!hasApi()){openSettings();return;}
+    if(!hasApi()){showNotice("ยังไม่ได้ตั้งค่า Worker URL กรุณาติดต่อผู้ดูแลระบบ","error");return;}
     $("#adminLoginForm").reset();$("#adminLoginDialog").showModal();
   });
+  $("#apiSettingsBtn").addEventListener("click",()=>openSettings(false));
   $("#adminLoginForm").addEventListener("submit",async e=>{
     e.preventDefault();const password=String(new FormData(e.currentTarget).get("adminPassword")||"");
     try{await adminLogin(password);$("#adminLoginDialog").close();showNotice("เข้าสู่ระบบ Admin สำเร็จ สามารถแก้ไขข้อมูล Tool ได้","success");}
@@ -566,20 +553,27 @@ function init(){
   $("#actionForm").addEventListener("submit",submitAction);
   $("#refreshBtn").addEventListener("click",refreshAll);$("#refreshHistoryBtn").addEventListener("click",refreshAll);
   ["searchInput","statusFilter","sortSelect"].forEach(id=>$("#"+id).addEventListener("input",renderTools));
-  $("#settingsForm").addEventListener("submit", e => {
+  $("#settingsForm").addEventListener("submit", async e => {
     e.preventDefault();
-    const fd = new FormData(e.currentTarget);
-    state.apiUrl = String(fd.get("apiUrl")).trim();
-    state.apiKey = String(fd.get("apiKey")).trim();
-    saveApiSettings();
-    $("#settingsDialog").close();
-    refreshAll();
+    if(!state.isAdmin){showNotice("ต้องเข้าสู่ระบบ Admin ก่อนเปลี่ยนการตั้งค่า","error");return;}
+    const fd=new FormData(e.currentTarget);
+    const apiUrl=String(fd.get("apiUrl")||"").trim();
+    const apiKey=String(fd.get("apiKey")||"").trim();
+    const adminPassword=String(fd.get("adminPassword")||"");
+    if(!apiUrl || !adminPassword){showNotice("กรุณากรอก Apps Script URL และรหัสผ่าน Admin","error");return;}
+    try{
+      const response=await fetch(API_PROXY_URL.replace(/\/$/,"")+"/api",{method:"POST",headers:{"Content-Type":"application/json","Accept":"application/json"},body:JSON.stringify({action:"adminUpdateConfig",apiUrl,apiKey,adminPassword,adminSessionId:state.adminSessionId})});
+      const result=await response.json();
+      if(!response.ok || !result.ok) throw new Error(result.error||"เปลี่ยนการตั้งค่าไม่สำเร็จ");
+      if(result.sessionId) state.adminSessionId=result.sessionId;
+      $("#settingsDialog").close();e.currentTarget.reset();
+      await refreshAll();showNotice("เปลี่ยนการเชื่อมต่อส่วนกลางสำเร็จ อุปกรณ์ทุกเครื่องจะใช้ค่าใหม่","success");
+    }catch(err){showNotice("เปลี่ยนการตั้งค่าไม่สำเร็จ: "+err.message,"error");}
   });
   $("#mobileMenu").addEventListener("click",()=>$("#sidebar").classList.toggle("open"));
-  // Settings can be opened with Alt+S. API settings are saved in this browser's localStorage.
-  document.addEventListener("keydown",e=>{if(e.altKey&&e.key.toLowerCase()==="s"){e.preventDefault();openSettings();}});
-  // Restore saved API settings and load Google Sheets automatically on page refresh.
-  loadApiSettings();
+  // API settings are unavailable in User Mode. A new device starts setup from Admin Login.
+
+  // All devices use the same centrally configured Worker proxy; no per-device API setup.
   setView("dashboard");
   refreshAll();
 }
