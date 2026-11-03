@@ -123,6 +123,25 @@
   #apiSettingsBtn{padding:8px 6px;font-size:9px}
 }
 
+
+/* ปรับขนาดปุ่ม Refresh บนมือถือ */
+@media(max-width:760px){
+  .panel-header .btn{
+    padding:7px 10px;
+    font-size:11px;
+    border-radius:7px;
+    gap:4px;
+  }
+}
+
+/* จอมือถือขนาดเล็ก */
+@media(max-width:380px){
+  .panel-header .btn{
+    padding:6px 8px;
+    font-size:10px;
+  }
+}
+
 .muted-inline{font-size:10px;color:#9aa3b3;white-space:nowrap}
 
 /* Backup categories are nested under OTHER. */
