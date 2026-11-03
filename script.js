@@ -224,8 +224,8 @@ function setView(view,line=""){
   $("#dashboardView").classList.toggle("hidden",view==="history");
   $("#historyView").classList.toggle("hidden",view!=="history");
   $("#pageTitle").textContent=view==="dashboard"?"Dashboard":view==="backup"?"Back up":view==="history"?"Movement History":line;
-  $("#tableHeading").textContent=view==="backup"?"Back up Inventory":line?line:"Tool List";
-  $("#sidebar").classList.remove("open");renderTools();
+  $("#tableHeading").textContent=view==="backup"?"Back up Inventory":line?line+" — Tools":"Tool List";
+  $("#sidebar").classList.remove("open");renderStats();renderTools();
 }
 function currentTools(){
   let arr=[...state.tools];
@@ -280,21 +280,23 @@ function hasCalibrationDates(tool){
   return Boolean(dateValue(tool.currentCalibration) && dateValue(tool.nextCalibration));
 }
 function renderStats(){
-  // Dashboard KPI counts only production-line tools and Back up tool.
-  // Exclude Back up controller, Accessories, and Damage.
-  const countable=state.tools.filter(isDashboardCountableTool);
-  const total=countable.length;
-  const withNext=countable.filter(t=>Boolean(dateValue(t.nextCalibration)));
-  const calibrated=withNext.filter(t=>hasCalibrationDates(t));
-  const ok=calibrated.filter(t=>calStatus(t).key==="ok").length;
-  const dueSoon=withNext.filter(t=>calStatus(t).key==="soon").length;
-  const overdue=withNext.filter(t=>calStatus(t).key==="overdue").length;
-  $("#totalTools").textContent=total;
-  $("#calOk").textContent=ok;
-  $("#dueSoon").textContent=dueSoon;
-  $("#overdue").textContent=overdue;
-  $("#backupCount").textContent=state.tools.filter(t=>normalizeLineName(t.line)==="back up tool").length;
+  // On an individual production Line page, show KPI counts for that Line only.
+  // On Dashboard and other views, retain the existing overall countable scope.
+  const scoped = state.view === "line" && state.selectedLine
+    ? state.tools.filter(t => normalizeLineName(t.line) === normalizeLineName(state.selectedLine))
+    : state.tools.filter(isDashboardCountableTool);
 
+  const total = scoped.length;
+  const statuses = scoped.map(calStatus);
+  const ok = statuses.filter(s => s.key === "ok").length;
+  const dueSoon = statuses.filter(s => s.key === "soon").length;
+  const overdue = statuses.filter(s => s.key === "overdue").length;
+
+  $("#totalTools").textContent = total;
+  $("#calOk").textContent = ok;
+  $("#dueSoon").textContent = dueSoon;
+  $("#overdue").textContent = overdue;
+  $("#backupCount").textContent = state.tools.filter(t => normalizeLineName(t.line) === "back up tool").length;
 }
 function renderHistory(){
   const rows=[...state.history].reverse();
