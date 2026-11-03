@@ -224,7 +224,7 @@ function setView(view,line=""){
   $("#dashboardView").classList.toggle("hidden",view==="history");
   $("#historyView").classList.toggle("hidden",view!=="history");
   $("#pageTitle").textContent=view==="dashboard"?"Dashboard":view==="backup"?"Back up":view==="history"?"Movement History":line;
-  $("#tableHeading").textContent=view==="backup"?"Back up Inventory":line?line+" — Tools":"Tool List";
+  $("#tableHeading").textContent=view==="backup"?"Back up Inventory":line?line:"Tool List";
   $("#sidebar").classList.remove("open");renderTools();
 }
 function currentTools(){
